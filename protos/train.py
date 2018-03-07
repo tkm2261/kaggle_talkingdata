@@ -8,33 +8,64 @@ import numpy as np
 import scipy.sparse as sp
 import pandas as pd
 import tensorflow as tf
-from keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
+from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from lstm import get_lstm, MAX_SEQUENCE_LENGTH, LIST_DATA_COL
+from lstm import get_lstm, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL
 import dask.dataframe as ddf
 import dask.multiprocessing
 from tqdm import tqdm
-from multiprocessing.pool import ThreadPool
+from multiprocessing.pool import Pool
 batch_size = 1000
+
+from logging import getLogger
+
+logger = getLogger(None)
+
+#param_file = sys.argv[1]
+# with open(param_file) as f:
+#    model_params = json.loads(f.read())
+param_file = None
+model_params = {'first_dences': [64, 16, 16],  # [128, 32, 32],
+                'is_first_bn': False,
+                'is_last_bn': False,
+                'last_dences': [16, 8],  # [32, 16],
+                'learning_rate': 0.001,
+                'lstm_dropout': 0.15,
+                'lstm_recurrent_dropout': 0.15,
+                'lstm_size': 16  # 32
+                }
 
 
 def read_csv(path):
+    sv = 'cache/' + path.split('/')[-1].split('.')[0] + '.gz'
+    if os.path.exists(sv):
+        print(path)
+        return pd.read_pickle(sv)
+
     df = pd.read_csv(path)
+
     for col in LIST_DATA_COL + ['list_target']:
-        df[col].fillna('[]', inplace=True)
-        df[col] = df[col].apply(json.loads)
+        if col in LIST_CONV_COL:
+            c = col.replace('avg_', '')
+            postfix = col.split('_')[-1]
+            map_d = pd.read_csv(f'../data/mst_{postfix}.csv', index_col=postfix).to_dict()[f'avg_{postfix}']
+            df[col] = df[c].apply(lambda x: np.array([map_d.get(i, -1) for i in x], dtype=np.float32))
+        else:
+            df[col].fillna('[]', inplace=True)
+            df[col] = df[col].apply(lambda x: np.array(json.loads(x), dtype=np.float32))
+    df.to_pickle(sv, protocol=-1)
     print(path)
     return df
 
 
-with ThreadPool(processes=4) as pool:
+with Pool(processes=4) as pool:
     df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz'))),
                    ignore_index=True, copy=False)
-
-df.to_pickle('train.pkl.gz', protocol=-1)
+print('load end')
 """
-df = pd.read_pickle('train.pkl.gz')
+df.to_pickle('train.pkl', protocol=-1)
+df = pd.read_pickle('train.pkl')
 """
 
 ids_train = df.ip.values
@@ -47,8 +78,8 @@ del df
 
 def pad(x, full=-1, dtype='int32'):
     ret = np.full(MAX_SEQUENCE_LENGTH, full, dtype=dtype)
-    if len(x) > 1:
-        end = random.randint(1, len(x))
+    if len(x) > 20:
+        end = random.randint(20, len(x))
     elif len(x) == 0:
         return ret
     else:
@@ -68,9 +99,7 @@ def data_generator(df):
             targets = np.array(data['list_target'].values)
             data = data[LIST_DATA_COL].values
 
-            inputs = []
-            for i in range(data.shape[1]):
-                inputs.append(np.array([pad(x) for x in data[:, i]], dtype='int32'))
+            inputs = [np.array([pad(x) for x in data[:, i]], dtype='int32') for i in range(data.shape[1])]
 
             x_batch = inputs
             y_batch = np.array([pad(x, 0) for x in targets])
@@ -79,9 +108,18 @@ def data_generator(df):
             yield x_batch, y_batch
 
 
+class LoggingCallback(Callback):
+    """Callback that logs message at end of epoch.
+    """
+
+    def on_epoch_end(self, epoch, logs={}):
+        msg = "Epoch: %i, %s" % (epoch, ", ".join("%s: %f" % (k, logs[k]) for k in sorted(logs)))
+        logger.info(msg)
+
+
 metric = 'val_auc'
 callbacks = [EarlyStopping(monitor=metric,
-                           patience=8,
+                           patience=3,
                            verbose=1,
                            min_delta=1e-4,
                            mode='max'),
@@ -96,10 +134,33 @@ callbacks = [EarlyStopping(monitor=metric,
                              save_best_only=True,
                              save_weights_only=True,
                              mode='max'),
-             TensorBoard(log_dir='logs')]
+             TensorBoard(log_dir='logs'),
+             LoggingCallback()
+             ]
 
 if __name__ == '__main__':
-    model = get_lstm()
+
+    from logging import StreamHandler, DEBUG, Formatter, FileHandler
+    DIR = './'
+
+    log_fmt = Formatter('%(asctime)s %(name)s %(lineno)d [%(levelname)s][%(funcName)s] %(message)s ')
+
+    handler = StreamHandler()
+    handler.setLevel('INFO')
+    handler.setFormatter(log_fmt)
+    logger.setLevel('INFO')
+    logger.addHandler(handler)
+
+    handler = FileHandler(DIR + 'train.py.log', 'a')
+    handler.setLevel(DEBUG)
+    handler.setFormatter(log_fmt)
+    logger.setLevel(DEBUG)
+    logger.addHandler(handler)
+
+    logger.info(f'file: {param_file}, params: {model_params}')
+
+    model = get_lstm(**model_params)
+
     # model.load_weights(filepath='weights/best_weights.hdf5')
 
     epochs = 10000

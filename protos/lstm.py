@@ -2,26 +2,23 @@
 import numpy as np
 import keras
 from keras.models import Model
-from keras.layers import Input, Dense, LSTM, Embedding, concatenate, BatchNormalization, Lambda
+from keras.layers import Input, Dense, LSTM, Embedding, concatenate, BatchNormalization, Lambda, Activation
 from keras.layers.wrappers import TimeDistributed
 from keras import backend as K
 import tensorflow as tf
 
 MAX_SEQUENCE_LENGTH = 100
 
-LIST_DATA_COL = ['list_app', 'list_device', 'list_os', 'list_ch', 'list_timediff',
-                 'list_month', 'list_day', 'list_dayofweek', 'list_hour', 'list_sum_attr', 'list_attr']
+LIST_CONV_COL = ['list_avg_app', 'list_avg_device', 'list_avg_os', 'list_avg_hour']
 
-LIST_CAT_COL = ['list_app', 'list_device', 'list_os', 'list_ch',
-                'list_month', 'list_day', 'list_dayofweek', 'list_hour']
+LIST_DATA_COL = ['list_app', 'list_device', 'list_os', 'list_ch',
+                 'list_timediff', 'list_hour', 'list_sum_attr', 'list_attr', 'list_avg_ip'] + LIST_CONV_COL
 
-LIST_FLOAT_COL = ['list_timediff', 'list_sum_attr', 'list_attr']
+LIST_CAT_COL = ['list_app', 'list_device', 'list_os', 'list_ch', 'list_hour']
 
-# MAP_COL_NUM = {'list_app': 768, 'list_device': 4227, 'list_os': 956, 'list_ch': 500}
-MAP_COL_NUM = {'list_app': 706, 'list_device': 3475, 'list_os': 800, 'list_ch': 202,
-               'list_month': 12, 'list_day': 31, 'list_dayofweek': 7, 'list_hour': 24}
+LIST_FLOAT_COL = ['list_timediff', 'list_sum_attr', 'list_attr'] + LIST_CONV_COL
 
-LIST_COL_NUM = [768, 4227, 956, 500]
+MAP_COL_NUM = {'list_app': 706, 'list_device': 3475, 'list_os': 800, 'list_ch': 202, 'list_hour': 24}
 
 
 def custom_objective(y_true, y_pred):
@@ -36,7 +33,15 @@ def auc(y_true, y_pred):
     return score
 
 
-def get_lstm():
+def get_lstm(first_dences=[192, 64, 64],
+             is_first_bn=False,
+             lstm_size=64,
+             lstm_dropout=0.15,
+             lstm_recurrent_dropout=0.15,
+             last_dences=[32, 1],
+             is_last_bn=True,
+             learning_rate=1.0e-3,
+             ):
     np.random.seed(0)
 
     inputs = {col: Input(shape=(MAX_SEQUENCE_LENGTH,), dtype='float32' if col in LIST_FLOAT_COL else 'int32',
@@ -46,23 +51,29 @@ def get_lstm():
                 for col in LIST_CAT_COL]
 
     floats = [Lambda(K.expand_dims)(inputs[col]) for col in LIST_FLOAT_COL]
-    all_input = concatenate(one_hots + floats, axis=2)
+    out = concatenate(one_hots + floats, axis=2)
 
-    out = Dense(192, activation='relu')(all_input)
-    out = Dense(64, activation='relu')(out)
-    out = Dense(64, activation='relu')(out)
+    for i, size in enumerate(first_dences):
+        out = Dense(size, name=f'first_dence_{i}_{size}')(out)
+        if is_first_bn:
+            out = BatchNormalization(name=f'first_bn_{i}_{size}')(out)
+        out = Activation('relu')(out)
 
-    lstm_layer = LSTM(64, dropout=0.15, recurrent_dropout=0.15, return_sequences=True,
-                      name='lstm', input_shape=(MAX_SEQUENCE_LENGTH, None))(out)
+    merged = LSTM(lstm_size, dropout=lstm_dropout, recurrent_dropout=lstm_recurrent_dropout, return_sequences=True,
+                  name='lstm', input_shape=(MAX_SEQUENCE_LENGTH, None))(out)
 
-    merged = TimeDistributed(BatchNormalization(name='BN1'), name='TD-BN1')(lstm_layer)
-    merged = TimeDistributed(Dense(32, activation='relu', name='D1'), name='TD-D1')(merged)
-    merged = TimeDistributed(BatchNormalization(name='BN2'), name='TD-BN2')(merged)
-    preds = TimeDistributed(Dense(1, activation='sigmoid', name='last'), name='TD-LST')(merged)
+    for i, size in enumerate(last_dences):
+        merged = TimeDistributed(Dense(size, name=f'last_de1_{i}_{size}'), name=f'last_de_{i}_{size}')(merged)
+        if is_last_bn:
+            merged = TimeDistributed(BatchNormalization(
+                name=f'last_bn1_{i}_{size}'), name=f'last_bn_{i}_{size}')(merged)
+        merged = TimeDistributed(Activation('relu'))(merged)
+
+    preds = TimeDistributed(Dense(1, activation='sigmoid', name='last1'), name='last')(merged)
 
     model = Model([inputs[col] for col in LIST_DATA_COL], preds)
     model.compile(loss='binary_crossentropy',
-                  optimizer=keras.optimizers.Adam(lr=1e-3),
+                  optimizer=keras.optimizers.Adam(lr=learning_rate),
                   metrics=[auc])
     return model
 
