@@ -11,30 +11,34 @@ import tensorflow as tf
 from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from lstm import get_lstm, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL
+from lstm import get_lstm, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL, get_lstm2
 import dask.dataframe as ddf
 import dask.multiprocessing
 from tqdm import tqdm
 from multiprocessing.pool import Pool
 batch_size = 1000
 
+np.random.seed(0)
+
 from logging import getLogger
 
 logger = getLogger(None)
 
-#param_file = sys.argv[1]
-# with open(param_file) as f:
-#    model_params = json.loads(f.read())
-param_file = None
-model_params = {'first_dences': [64, 16, 16],  # [128, 32, 32],
-                'is_first_bn': False,
-                'is_last_bn': False,
-                'last_dences': [16, 8],  # [32, 16],
-                'learning_rate': 0.001,
-                'lstm_dropout': 0.15,
-                'lstm_recurrent_dropout': 0.15,
-                'lstm_size': 16  # 32
-                }
+try:
+    param_file = sys.argv[1]
+    with open(param_file) as f:
+        model_params = json.loads(f.read())
+except IndexError:
+    param_file = None
+    model_params = {'first_dences': [64, 16, 16],  # [128, 32, 32],
+                    'is_first_bn': False,
+                    'is_last_bn': False,
+                    'last_dences': [16, 8],  # [32, 16],
+                    'learning_rate': 0.001,
+                    'lstm_dropout': 0.15,
+                    'lstm_recurrent_dropout': 0.15,
+                    'lstm_size': 16  # 32
+                    }
 
 
 def read_csv(path):
@@ -57,23 +61,6 @@ def read_csv(path):
     df.to_pickle(sv, protocol=-1)
     print(path)
     return df
-
-
-with Pool(processes=4) as pool:
-    df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz'))),
-                   ignore_index=True, copy=False)
-print('load end')
-"""
-df.to_pickle('train.pkl', protocol=-1)
-df = pd.read_pickle('train.pkl')
-"""
-
-ids_train = df.ip.values
-ids_train_split, ids_valid_split = train_test_split(ids_train, test_size=0.1, random_state=42)
-
-train_df = df[df.ip.isin(ids_train_split)].reset_index(drop=True)
-valid_df = df[df.ip.isin(ids_valid_split)].reset_index(drop=True)
-del df
 
 
 def pad(x, full=-1, dtype='int32'):
@@ -99,7 +86,8 @@ def data_generator(df):
             targets = np.array(data['list_target'].values)
             data = data[LIST_DATA_COL].values
 
-            inputs = [np.array([pad(x) for x in data[:, i]], dtype='int32') for i in range(data.shape[1])]
+            inputs = [np.array([pad(x) for x in data[:, i]], dtype=df[LIST_DATA_COL[i]].dtype)
+                      for i in range(data.shape[1])]
 
             x_batch = inputs
             y_batch = np.array([pad(x, 0) for x in targets])
@@ -159,8 +147,21 @@ if __name__ == '__main__':
 
     logger.info(f'file: {param_file}, params: {model_params}')
 
-    model = get_lstm(**model_params)
+    with Pool(processes=4) as pool:
+        df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz'))),
+                       ignore_index=True, copy=False)
+        df.sort_values('ip', inplace=True)
+    logger.info('load end')
 
+    ids_train = df.ip.values
+    ids_train_split, ids_valid_split = train_test_split(ids_train, test_size=0.1, random_state=42)
+
+    train_df = df[df.ip.isin(ids_train_split)].reset_index(drop=True)
+    valid_df = df[df.ip.isin(ids_valid_split)].reset_index(drop=True)
+    del df
+    logger.info('split end')
+
+    model = get_lstm2(**model_params)
     # model.load_weights(filepath='weights/best_weights.hdf5')
 
     epochs = 10000
