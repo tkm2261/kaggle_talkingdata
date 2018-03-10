@@ -65,8 +65,8 @@ def read_csv(path):
 
 def pad(x, full=-1, dtype='int32'):
     ret = np.full(MAX_SEQUENCE_LENGTH, full, dtype=dtype)
-    if len(x) > 20:
-        end = random.randint(20, len(x))
+    if len(x) > MAX_SEQUENCE_LENGTH:
+        end = random.randint(MAX_SEQUENCE_LENGTH, len(x))
     elif len(x) == 0:
         return ret
     else:
@@ -146,11 +146,15 @@ if __name__ == '__main__':
     logger.addHandler(handler)
 
     logger.info(f'file: {param_file}, params: {model_params}')
-
     with Pool(processes=4) as pool:
         df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz'))),
                        ignore_index=True, copy=False)
         df.sort_values('ip', inplace=True)
+        #df.to_pickle('train.pkl', protocol=-1)
+    """
+    df = pd.read_pickle('train.pkl')
+    """
+
     logger.info('load end')
 
     ids_train = df.ip.values
@@ -164,7 +168,7 @@ if __name__ == '__main__':
     model = get_lstm2(**model_params)
     # model.load_weights(filepath='weights/best_weights.hdf5')
 
-    epochs = 10000
+    epochs = 10
     model.fit_generator(generator=data_generator(train_df),
                         steps_per_epoch=np.ceil(float(len(ids_train_split)) / float(batch_size)),
                         epochs=epochs,

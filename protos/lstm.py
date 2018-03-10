@@ -8,7 +8,7 @@ from keras.layers.wrappers import TimeDistributed
 from keras import backend as K
 import tensorflow as tf
 
-MAX_SEQUENCE_LENGTH = 100
+MAX_SEQUENCE_LENGTH = 5
 
 LIST_CONV_COL = ['list_avg_app', 'list_avg_device', 'list_avg_os', 'list_avg_hour']
 
@@ -110,14 +110,13 @@ def get_lstm2(first_dences=[64, 64, 16],
                 dropout=lstm_dropout, recurrent_dropout=lstm_recurrent_dropout,
                 return_sequences=True,
                 name='lstm', input_shape=(MAX_SEQUENCE_LENGTH, None))(out)
+
     gru = CuDNNGRU(16, name='gru',
-                   #dropout=gru_dropout, recurrent_dropout=gru_recurrent_dropout,
                    input_shape=(MAX_SEQUENCE_LENGTH, None), return_sequences=True)(out)
     rnn = SimpleRNN(16,
                     name='rnn',
-                    #dropout=rnn_dropout, recurrent_dropout=rnn_recurrent_dropout,
+                    #dropout=lstm_dropout, recurrent_dropout=lstm_recurrent_dropout,
                     input_shape=(MAX_SEQUENCE_LENGTH, None), return_sequences=True)(out)
-
     merged = concatenate([lstm, gru, rnn], axis=2)
 
     for i, size in enumerate(last_dences):
