@@ -149,7 +149,7 @@ if __name__ == '__main__':
                     }
 
     model = get_lstm2(**model_params)
-    model.load_weights(filepath=os.path.join(FILE_DIR, 'weights/best_weights_0310_sub1.hdf5'))
+    model.load_weights(filepath=os.path.join(FILE_DIR, 'weights/best_weights.hdf5'))
     model._make_predict_function()
     logger.info('model load end')
 

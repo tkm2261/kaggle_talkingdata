@@ -11,7 +11,7 @@ import tensorflow as tf
 from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from lstm import get_lstm3, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL, get_lstm2, LIST_FLOAT_COL
+from lstm import get_lstm_sin, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL, LIST_FLOAT_COL
 import dask.dataframe as ddf
 import dask.multiprocessing
 from tqdm import tqdm
@@ -93,8 +93,8 @@ def data_generator(df):
                       for i in range(data.shape[1])]
 
             x_batch = inputs
-            y_batch = np.array([pad(x, rand_ends[i], 0) for i, x in enumerate(targets)])
-            y_batch = np.expand_dims(y_batch, axis=2)
+            y_batch = np.array([x[rand_ends[i] - 1] for i, x in enumerate(targets)])
+            #y_batch = np.expand_dims(y_batch, axis=2)
 
             yield x_batch, y_batch
 
@@ -168,10 +168,10 @@ if __name__ == '__main__':
     del df
     logger.info('split end')
 
-    model = get_lstm3(**model_params)
+    model = get_lstm_sin(**model_params)
     # model.load_weights(filepath='weights/best_weights.hdf5')
 
-    epochs = 5
+    epochs = 10000
     model.fit_generator(generator=data_generator(train_df),
                         steps_per_epoch=np.ceil(float(len(ids_train_split)) / float(batch_size)),
                         epochs=epochs,
@@ -179,9 +179,9 @@ if __name__ == '__main__':
                         callbacks=callbacks,
                         validation_data=data_generator(valid_df),
                         validation_steps=np.ceil(float(len(ids_valid_split)) / float(batch_size)))
+
     """
     valid = data_generator(valid_df)
-
     scores = []
     from sklearn.metrics import roc_auc_score
     preds = []

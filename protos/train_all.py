@@ -11,7 +11,8 @@ import tensorflow as tf
 from keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau, ModelCheckpoint, TensorBoard
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from lstm import get_lstm3, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL, get_lstm2, LIST_FLOAT_COL
+from sklearn.metrics import roc_auc_score
+from lstm import get_lstm_sin, MAX_SEQUENCE_LENGTH, LIST_DATA_COL, LIST_CONV_COL, get_lstm2, LIST_FLOAT_COL
 import dask.dataframe as ddf
 import dask.multiprocessing
 from tqdm import tqdm
@@ -34,7 +35,7 @@ except IndexError:
                     'is_first_bn': False,
                     'is_last_bn': False,
                     'last_dences': [16, 8],  # [32, 16],
-                    'learning_rate': 0.001,
+                    'learning_rate': 0.00001,
                     'lstm_dropout': 0.15,
                     'lstm_recurrent_dropout': 0.15,
                     'lstm_size': 16  # 32
@@ -63,14 +64,6 @@ def read_csv(path):
     return df
 
 
-def rand_end(x):
-    if len(x) > MAX_SEQUENCE_LENGTH:
-        end = random.randint(MAX_SEQUENCE_LENGTH, len(x))
-    else:
-        end = len(x)
-    return end
-
-
 def pad(x, end, full=-1, dtype='int32'):
     ret = np.full(MAX_SEQUENCE_LENGTH, full, dtype=dtype)
     start = max(0, end - MAX_SEQUENCE_LENGTH)
@@ -78,25 +71,51 @@ def pad(x, end, full=-1, dtype='int32'):
     return ret
 
 
+def _proc_row(args):
+    row, click_ids = args
+    batch_click_ids = []
+    inputs = [[] for _ in range(row.shape[0])]
+
+    for j, click_id in enumerate(click_ids):
+        if click_id == -1:
+            continue
+        #batch_click_ids.append(pad(click_ids, j + 1, full=0))
+        batch_click_ids.append(click_id)
+        for k in range(row.shape[0]):
+            inputs[k].append(pad(row[k], j + 1))
+    return batch_click_ids, inputs
+
+
 def data_generator(df):
-    while True:
-        df = df.take(np.random.permutation(len(df))).reset_index(drop=True)
-        for start in range(0, df.shape[0], batch_size):
-            end = min(start + batch_size, df.shape[0])
-            data = df.iloc[start:end]
+    df = df.take(np.random.permutation(len(df))).reset_index(drop=True)
+    for start in range(0, df.shape[0], batch_size):
 
-            targets = np.array(data['list_target'].values)
-            data = data[LIST_FLOAT_COL].values
-            rand_ends = [rand_end(x) for x in targets]
+        end = min(start + batch_size, df.shape[0])
+        data = df.iloc[start:end]
 
-            inputs = [np.array([pad(x, rand_ends[i]) for i, x in enumerate(data[:, i])], dtype=df[LIST_DATA_COL[i]].dtype)
-                      for i in range(data.shape[1])]
+        list_click_ids = np.array(data['list_target'].values)
+        data = data[LIST_FLOAT_COL].values
+        batch_click_ids = []
+        inputs = [[] for _ in range(data.shape[1])]
+        #results = [_proc_row((data[i], list_click_ids[i])) for i in range(len(list_click_ids))]
+        with Pool() as p:
+            results = p.map(_proc_row,
+                            [(data[i], list_click_ids[i]) for i in range(len(list_click_ids))]
+                            )
 
-            x_batch = inputs
-            y_batch = np.array([pad(x, rand_ends[i], 0) for i, x in enumerate(targets)])
-            y_batch = np.expand_dims(y_batch, axis=2)
+        logger.debug('proc end')
+        for _ids, _data in results:
+            batch_click_ids += _ids
+            for k in range(data.shape[1]):
+                inputs[k] += _data[k]
+        logger.debug('join end')
+        inputs = [np.stack(inputs[k]) for k in range(data.shape[1])]
 
-            yield x_batch, y_batch
+        x_batch = inputs
+        y_batch = np.array(batch_click_ids)
+        # y_batch = np.expand_dims(y_batch, axis=2)
+
+        yield x_batch, y_batch
 
 
 class LoggingCallback(Callback):
@@ -107,27 +126,6 @@ class LoggingCallback(Callback):
         msg = "Epoch: %i, %s" % (epoch, ", ".join("%s: %f" % (k, logs[k]) for k in sorted(logs)))
         logger.info(msg)
 
-
-metric = 'val_auc'
-callbacks = [EarlyStopping(monitor=metric,
-                           patience=3,
-                           verbose=1,
-                           min_delta=1e-4,
-                           mode='max'),
-             ReduceLROnPlateau(monitor=metric,
-                               factor=0.1,
-                               patience=4,
-                               verbose=1,
-                               epsilon=1e-4,
-                               mode='max'),
-             ModelCheckpoint(monitor=metric,
-                             filepath='weights/best_weights.hdf5',
-                             save_best_only=True,
-                             save_weights_only=True,
-                             mode='max'),
-             TensorBoard(log_dir='logs'),
-             LoggingCallback()
-             ]
 
 if __name__ == '__main__':
 
@@ -150,10 +148,10 @@ if __name__ == '__main__':
 
     logger.info(f'file: {param_file}, params: {model_params}')
     with Pool(processes=4) as pool:
-        df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz'))),
+        df = pd.concat(list(pool.map(read_csv, glob.glob('../data/dmt_train/*.csv.gz')[:1])),
                        ignore_index=True, copy=False)
         df.sort_values('ip', inplace=True)
-        #df.to_pickle('train.pkl', protocol=-1)
+        # df.to_pickle('train.pkl', protocol=-1)
     """
     df = pd.read_pickle('train.pkl')
     """
@@ -168,32 +166,26 @@ if __name__ == '__main__':
     del df
     logger.info('split end')
 
-    model = get_lstm3(**model_params)
-    # model.load_weights(filepath='weights/best_weights.hdf5')
-
-    epochs = 5
-    model.fit_generator(generator=data_generator(train_df),
-                        steps_per_epoch=np.ceil(float(len(ids_train_split)) / float(batch_size)),
-                        epochs=epochs,
-                        verbose=2,
-                        callbacks=callbacks,
-                        validation_data=data_generator(valid_df),
-                        validation_steps=np.ceil(float(len(ids_valid_split)) / float(batch_size)))
+    model = get_lstm_sin(**model_params)
+    model.load_weights(filepath='weights/best_weights.hdf5')
     """
     valid = data_generator(valid_df)
-
-    scores = []
-    from sklearn.metrics import roc_auc_score
-    preds = []
-    labels = []
-    for i in range(10):
-        x_batch, y_batch = next(valid)
-        pred = model.predict(x_batch, batch_size=1000, verbose=1)[:, -1, 0].flatten().tolist()
-        preds += pred
-        labels += y_batch[:, -1, 0].flatten().tolist()
-        sc = roc_auc_score(y_batch[:, -1, 0].flatten(), pred)
-        print(f'roc {i}', sc)
-        scores.append(sc)
-    print('mean', np.mean(scores))
-    print('mean', roc_auc_score(labels, preds))
+    aaa = next(valid)
+    with open('aaa.pkl', 'wb') as f:
+        pickle.dump(aaa, f, -1)
     """
+    with open('aaa.pkl', 'rb') as f:
+        aaa = pickle.load(f)
+
+    x_valid, y_valid = aaa
+
+    epochs = 10
+    cnt = 0
+    for ep in range(epochs):
+        for x_batch, y_batch in data_generator(train_df):
+            model.fit(x=x_batch, y=y_batch, batch_size=1000, epochs=1, verbose=1)
+            cnt += 1
+            if cnt % 3 == 0:
+                model.save_weights(f'weights/weights_{cnt}.hdf5')
+                pred = model.predict(x_valid, batch_size=1000, verbose=1)[:, 0]
+                print('eval: ', cnt, roc_auc_score(y_valid, pred))
