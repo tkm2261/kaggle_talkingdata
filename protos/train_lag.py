@@ -59,9 +59,9 @@ try:
         model_params = json.loads(f.read())
 except IndexError:
     param_file = None
-    model_params = {'first_dences': [64, 32, 32, 8],  # [128, 32, 32],
-                    'learning_rate': 0.001,
-                    }
+    model_params = {  # 'first_dences': [64, 32, 32, 8],  # [128, 32, 32],
+        'learning_rate': 0.001,
+    }
 
 
 import gzip
