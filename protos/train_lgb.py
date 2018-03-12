@@ -58,37 +58,54 @@ def callback(data):
     preds = np.array([np.argmax(x) for x in preds], dtype=np.int)
     labels = val_data.get_label().astype(np.int)
     sc = log_loss(labels, preds)
-    sc2 = consist_score(labels, preds)
+    sc2 = roc_auc_score(labels, preds)
     logger.info('cal [{}] {} {}'.format(data.iteration + 1, sc, sc2))
 
 
 def train():
 
-    df = load_train_data()
+    #df = load_train_data()
+    #df.to_pickle('train.pkl', protocol=-1)
 
+    df = pd.read_pickle('train.pkl')  # .tail(50000000).reset_index(drop=True)
+    pos = df[df.is_attributed == 1]
+    neg = df[df.is_attributed == 0]
+    n_pos = pos.shape[0]
+    n_neg = neg.shape[0]
+    factor = 10
+    df = pd.concat([pos, neg.sample(n_pos * factor, random_state=42)], axis=0, ignore_index=True, copy=False)
+    scale_pos_weight = n_pos / n_neg * factor
+
+    df.to_pickle('train_sampling.pkl', protocol=-1)
+
+    del pos
+    del neg
+    gc.collect()
     logger.info('data size {}'.format(df.shape))
+    logger.info(f'pos: {n_pos}, neg: {n_neg}, rate: {scale_pos_weight}')
 
     x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)
-    y_train = df.target.is_attributed.astype(int)
+    y_train = df.is_attributed.astype(int)
     usecols = x_train.columns.values
     with open(DIR + 'usecols.pkl', 'wb') as f:
         pickle.dump(usecols, f, -1)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
 
     # {'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 255, 'max_depth': -1, 'metric': 'binary_logloss', 'min_child_weight': 5, 'min_split_gain': 0.01, 'num_leaves': 63, 'objective': 'cross_entropy', 'reg_alpha': 1, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
-    all_params = {'min_child_weight': [5],
-                  'subsample': [1.0],
+    all_params = {'min_child_weight': [3, 5, 10],
+                  'subsample': [1.0, 0.7],
                   'subsample_freq': [1],
                   'seed': [114],
-                  'colsample_bytree': [0.9],
-                  'learning_rate': [0.01],
+                  'colsample_bytree': [0.9, 0.7],
+                  'learning_rate': [0.1],
                   'max_depth': [-1],
-                  'min_split_gain': [0.01],
-                  'reg_alpha': [1],
+                  'min_split_gain': [0.01, 0],
+                  'reg_alpha': [1, 0],
                   'max_bin': [255],
-                  'num_leaves': [63],
+                  'num_leaves': [31, 63, 127],
                   'objective': ['binary'],
-                  'metric': ['binary_logloss'],
+                  'metric': ['auc'],
+                  'scale_pos_weight': [scale_pos_weight],
                   'verbose': [-1],
                   }
 
@@ -103,8 +120,8 @@ def train():
         all_pred = np.zeros(y_train.shape[0])
         for train, test in cv.split(x_train, y_train):
             cnt += 1
-            trn_x = x_train[train]
-            val_x = x_train[test]
+            trn_x = x_train.iloc[train]
+            val_x = x_train.iloc[test]
             trn_y = y_train[train]
             val_y = y_train[test]
 
@@ -123,8 +140,8 @@ def train():
 
             all_pred[test] = pred
 
-            _score = log_loss(val_y, pred)
-            _score2 = roc_auc_score(val_y, pred)
+            _score2 = log_loss(val_y, pred)
+            _score = - roc_auc_score(val_y, pred)
 
             logger.info('   _score: %s' % _score)
             logger.info('   _score2: %s' % _score2)
@@ -144,7 +161,7 @@ def train():
             del trn_x
             del clf
             gc.collect()
-
+            break
         with open(DIR + 'train_cv_tmp.pkl', 'wb') as f:
             pickle.dump(all_pred, f, -1)
 
