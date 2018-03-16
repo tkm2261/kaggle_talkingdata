@@ -17,7 +17,7 @@ import dask.dataframe as ddf
 import dask.multiprocessing
 from tqdm import tqdm
 from multiprocessing.pool import Pool
-batch_size = 1000
+batch_size = 20000
 
 np.random.seed(0)
 
@@ -59,9 +59,15 @@ try:
         model_params = json.loads(f.read())
 except IndexError:
     param_file = None
-    model_params = {  # 'first_dences': [64, 32, 32, 8],  # [128, 32, 32],
-        'learning_rate': 0.001,
-    }
+    model_params = {'first_dences': [256, 128, 128],  # [128, 32, 32],
+                    'is_first_bn': False,
+                    'is_last_bn': False,
+                    'last_dences': [64, 32, 16, 8],  # [32, 16],
+                    'learning_rate': 0.001,
+                    'lstm_dropout': 0.15,
+                    'lstm_recurrent_dropout': 0.15,
+                    'lstm_size': 64  # 32
+                    }
 
 
 import gzip
@@ -94,7 +100,10 @@ def data_generator(paths, repeat=True):
 
                 inputs = []
                 for col in LIST_COL:
-                    cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
+                    if col in ['sum_attr', 'last_attr', 'ip']:
+                        cols = [col for i in range(5)]
+                    else:
+                        cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
                     inputs.append(data[cols].values)
 
                 inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].mean(axis=1)
@@ -137,6 +146,10 @@ class LoggingCallback(Callback):
             preds += pred.tolist()  # x_batch[:, 7].tolist()
         auc = roc_auc_score(labels, preds)
         msg = "Epoch: %i, %s" % (epoch, ", ".join("%s: %f" % (k, logs[k]) for k in sorted(logs))) + f', auc: {auc}'
+        """
+        msg = "Epoch: %i, %s" % (epoch, ", ".join("%s: %f" % (k, logs[k]) for k in sorted(logs)))
+        """
+
         logger.info(msg)
 
 
@@ -159,7 +172,7 @@ def main():
     logger.addHandler(handler)
 
     logger.info(f'file: {param_file}, params: {model_params}')
-    paths = sorted(glob.glob('../data/dmt_train_lag/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_train_lag2/*.csv.gz'))
     train_path, valid_path = train_test_split(paths, test_size=0.05, random_state=42)
 
     # train_path = paths[:-2]
@@ -167,18 +180,18 @@ def main():
     # steps_per_epoch: 1784, validation_steps: 74
     steps_per_epoch = 148  # calc_batch_num(train_path)
     validation_steps = 148  # calc_batch_num(valid_path)
-    metric = 'val_loss'
-    mode = 'min'
+    metric = 'val_auc'
+    mode = 'max'
     callbacks = [EarlyStopping(monitor=metric,
                                patience=10,
                                verbose=1,
-                               min_delta=1e-8,
+                               min_delta=1e-4,
                                mode=mode),
                  ReduceLROnPlateau(monitor=metric,
                                    factor=0.1,
                                    patience=2,
                                    verbose=1,
-                                   epsilon=1e-8,
+                                   epsilon=1e-4,
                                    mode=mode),
                  ModelCheckpoint(monitor=metric,
                                  filepath='weights/best_weights.hdf5',
@@ -192,7 +205,7 @@ def main():
     logger.info(f'steps_per_epoch: {steps_per_epoch}, validation_steps: {validation_steps}')
 
     model = get_lstm_sin(**model_params)
-    # model.load_weights(filepath='weights/best_weights.hdf5')
+    model.load_weights(filepath='weights/best_weights.hdf5')
 
     epochs = 10000
     model.fit_generator(generator=data_generator(train_path),

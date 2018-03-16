@@ -59,8 +59,14 @@ try:
         model_params = json.loads(f.read())
 except IndexError:
     param_file = None
-    model_params = {'first_dences': [64, 32, 32, 8],  # [128, 32, 32],
+    model_params = {'first_dences': [256, 128, 128],  # [128, 32, 32],
+                    'is_first_bn': False,
+                    'is_last_bn': False,
+                    'last_dences': [64, 32, 16, 8],  # [32, 16],
                     'learning_rate': 0.001,
+                    'lstm_dropout': 0.15,
+                    'lstm_recurrent_dropout': 0.15,
+                    'lstm_size': 64  # 32
                     }
 
 
@@ -93,8 +99,19 @@ def data_generator(paths, repeat=True):
 
             inputs = []
             for col in LIST_COL:
-                cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
+                if col in ['sum_attr', 'last_attr', 'ip']:
+                    cols = [col for i in range(5)]
+                else:
+                    cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
                 inputs.append(data[cols].values)
+
+            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].mean(axis=1)
+                                    for i in range(0, 5)[::-1]]).T)
+            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].max(axis=1)
+                                    for i in range(0, 5)[::-1]]).T)
+            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].min(axis=1)
+                                    for i in range(0, 5)[::-1]]).T)
+
             inputs.append(data[[f'is_attributed_{i}' for i in range(1, 6)[::-1]]].values)
 
             x_batch = inputs
@@ -168,7 +185,7 @@ def main():
     logger.addHandler(handler)
 
     logger.info(f'file: {param_file}, params: {model_params}')
-    paths = sorted(glob.glob('../data/dmt_test_lag/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_test_lag2/*.csv.gz'))
 
     model = get_lstm_sin(**model_params)
     model.load_weights(filepath='weights/best_weights.hdf5')
