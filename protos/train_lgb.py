@@ -17,7 +17,7 @@ logger = getLogger(None)
 
 from tqdm import tqdm
 
-from load_data import load_train_data, load_test_data
+from load_data import load_train_data, load_test_data, load_valid_data, load_all_data
 import sys
 DIR = 'result_tmp/'  # sys.argv[1]  # 'result_1008_rate001/'
 print(DIR)
@@ -64,10 +64,10 @@ def callback(data):
 
 def train():
 
-    #df = load_train_data()
     #df.to_pickle('train.pkl', protocol=-1)
-
-    df = pd.read_pickle('train.pkl')  # .tail(50000000).reset_index(drop=True)
+    df = load_train_data()
+    '''
+    # df = pd.read_pickle('train.pkl')  # .tail(50000000).reset_index(drop=True)
     pos = df[df.is_attributed == 1]
     neg = df[df.is_attributed == 0]
     n_pos = pos.shape[0]
@@ -81,34 +81,69 @@ def train():
     del pos
     del neg
     gc.collect()
-    logger.info('data size {}'.format(df.shape))
     logger.info(f'pos: {n_pos}, neg: {n_neg}, rate: {scale_pos_weight}')
+
+    scale_pos_weight = 0.024920160723572247
+    df = pd.read_pickle('train_sampling.pkl')
+    '''
+
+    logger.info('train data size {}'.format(df.shape))
 
     x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)
     y_train = df.is_attributed.astype(int)
+
+    df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
+    logger.info('valid data size {}'.format(df.shape))
+    x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)
+    y_valid = df.is_attributed.astype(int)
+
+    del df
+    gc.collect()
     usecols = x_train.columns.values
     with open(DIR + 'usecols.pkl', 'wb') as f:
         pickle.dump(usecols, f, -1)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
-
-    # {'colsample_bytree': 0.9, 'learning_rate': 0.01, 'max_bin': 255, 'max_depth': -1, 'metric': 'binary_logloss', 'min_child_weight': 5, 'min_split_gain': 0.01, 'num_leaves': 63, 'objective': 'cross_entropy', 'reg_alpha': 1, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
-    all_params = {'min_child_weight': [3, 5, 10],
-                  'subsample': [1.0, 0.7],
+    # {'colsample_bytree': 0.9, 'learning_rate': 0.1, 'max_bin': 255, 'max_depth': -1, 'metric': 'auc', 'min_child_weight': 3, 'min_split_gain': 0, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 0.024768409950771564, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
+    all_params = {'min_child_weight': [3],
+                  'subsample': [1.0],
                   'subsample_freq': [1],
                   'seed': [114],
-                  'colsample_bytree': [0.9, 0.7],
+                  'colsample_bytree': [0.9],
                   'learning_rate': [0.1],
                   'max_depth': [-1],
-                  'min_split_gain': [0.01, 0],
-                  'reg_alpha': [1, 0],
+                  'min_split_gain': [0],
+                  'reg_alpha': [0],
                   'max_bin': [255],
-                  'num_leaves': [31, 63, 127],
+                  'num_leaves': [127],
                   'objective': ['binary'],
                   'metric': ['auc'],
-                  'scale_pos_weight': [scale_pos_weight],
+                  #'scale_pos_weight': [scale_pos_weight],
                   'verbose': [-1],
                   }
-
+    """
+    all_params = {
+        'boosting_type': 'gbdt',
+        'objective': 'binary',
+        'metric': 'auc',
+        'learning_rate': 0.01,
+        #'is_unbalance': 'true',  #because training data is unbalance (replaced with scale_pos_weight)
+        'num_leaves': 31,  # we should let it be smaller than 2^(max_depth)
+        'max_depth': -1,  # -1 means no limit
+        'min_child_samples': 20,  # Minimum number of data need in a child(min_data_in_leaf)
+        'max_bin': 255,  # Number of bucketed bin for feature values
+        'subsample': 0.6,  # Subsample ratio of the training instance.
+        'subsample_freq': 0,  # frequence of subsample, <=0 means no enable
+        'colsample_bytree': 0.3,  # Subsample ratio of columns when constructing each tree.
+        'min_child_weight': 5,  # Minimum sum of instance weight(hessian) needed in a child(leaf)
+        'subsample_for_bin': 200000,  # Number of samples for constructing bin
+        'min_split_gain': 0,  # lambda_l1, lambda_l2 and min_gain_to_split to regularization
+        'reg_alpha': 0,  # L1 regularization term on weights
+        'reg_lambda': 0,  # L2 regularization term on weights
+        'nthread': 8,
+        'verbose': -1,
+    }
+    all_params = {k: [v] for k, v in all_params.items()}
+    """
     use_score = 0
     min_score = (100, 100, 100)
 
@@ -118,12 +153,12 @@ def train():
         list_score2 = []
         list_best_iter = []
         all_pred = np.zeros(y_train.shape[0])
-        for train, test in cv.split(x_train, y_train):
+        if 1:
             cnt += 1
-            trn_x = x_train.iloc[train]
-            val_x = x_train.iloc[test]
-            trn_y = y_train[train]
-            val_y = y_train[test]
+            trn_x = x_train
+            val_x = x_valid
+            trn_y = y_train
+            val_y = y_valid
 
             train_data = lgb.Dataset(trn_x, label=trn_y)
             test_data = lgb.Dataset(val_x, label=val_y)
@@ -138,7 +173,7 @@ def train():
                             )
             pred = clf.predict(val_x)
 
-            all_pred[test] = pred
+            #all_pred[test] = pred
 
             _score2 = log_loss(val_y, pred)
             _score = - roc_auc_score(val_y, pred)
@@ -161,7 +196,7 @@ def train():
             del trn_x
             del clf
             gc.collect()
-            break
+
         with open(DIR + 'train_cv_tmp.pkl', 'wb') as f:
             pickle.dump(all_pred, f, -1)
 
@@ -181,20 +216,38 @@ def train():
             min_score = score
             min_params = params
         logger.info('best score: {} {}'.format(min_score[use_score], min_score))
+        logger.info('best params: {}'.format(min_params))
 
+    del val_x
+    del trn_y
+    del val_y
+    del train_data
+    del test_data
     gc.collect()
+
+    trees = np.mean(list_best_iter)
+
+    x_train = pd.concat([x_train, x_valid], axis=0, ignore_index=True)
+    y_train = np.r_[y_train, y_valid]
+    del x_valid
+    del y_valid
+    gc.collect()
+    logger.info('all data size {}'.format(x_train.shape))
+
     train_data = lgb.Dataset(x_train, label=y_train)
+    del x_train
+    gc.collect()
     logger.info('train start')
     clf = lgb.train(min_params,
                     train_data,
-                    int(np.mean(list_best_iter) * 1.1),
+                    int(trees * 1.1),
                     valid_sets=[train_data],
                     verbose_eval=30
                     )
     logger.info('train end')
     with open(DIR + 'model.pkl', 'wb') as f:
         pickle.dump(clf, f, -1)
-    del x_train
+    #del x_train
     gc.collect()
 
     logger.info('save end')
