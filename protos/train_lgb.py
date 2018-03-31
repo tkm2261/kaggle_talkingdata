@@ -65,7 +65,7 @@ def callback(data):
 def train():
 
     #df.to_pickle('train.pkl', protocol=-1)
-    df = load_train_data()
+    df = load_all_data()  # .sample(10000000, random_state=42).reset_index(drop=True)
     '''
     # df = pd.read_pickle('train.pkl')  # .tail(50000000).reset_index(drop=True)
     pos = df[df.is_attributed == 1]
@@ -83,19 +83,22 @@ def train():
     gc.collect()
     logger.info(f'pos: {n_pos}, neg: {n_neg}, rate: {scale_pos_weight}')
 
-    scale_pos_weight = 0.024920160723572247
     df = pd.read_pickle('train_sampling.pkl')
     '''
+    scale_pos_weight = 0.024920160723572247
 
     logger.info('train data size {}'.format(df.shape))
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
 
-    x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)
-    y_train = df.is_attributed.astype(int)
+    train, test = next(cv.split(df, df.is_attributed))
 
-    df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
+    x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32).loc[train].reset_index(drop=True)
+    y_train = df.is_attributed.astype(int).values[train]
+
+    # df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
     logger.info('valid data size {}'.format(df.shape))
-    x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)
-    y_valid = df.is_attributed.astype(int)
+    x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32).loc[test].reset_index(drop=True)
+    y_valid = df.is_attributed.astype(int).values[test]
 
     del df
     gc.collect()
@@ -103,8 +106,8 @@ def train():
     with open(DIR + 'usecols.pkl', 'wb') as f:
         pickle.dump(usecols, f, -1)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
-    # {'colsample_bytree': 0.9, 'learning_rate': 0.1, 'max_bin': 255, 'max_depth': -1, 'metric': 'auc', 'min_child_weight': 3, 'min_split_gain': 0, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 0.024768409950771564, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
-    all_params = {'min_child_weight': [3],
+    # {'colsample_bytree': 0.9, 'learning_rate': 0.1, 'max_bin': 255, 'max_depth': -1, 'metric': 'auc', 'min_child_weight': 20, 'min_split_gain': 0, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 1, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
+    all_params = {'min_child_weight': [20],
                   'subsample': [1.0],
                   'subsample_freq': [1],
                   'seed': [114],
@@ -117,30 +120,34 @@ def train():
                   'num_leaves': [127],
                   'objective': ['binary'],
                   'metric': ['auc'],
-                  #'scale_pos_weight': [scale_pos_weight],
+                  'scale_pos_weight': [1],
                   'verbose': [-1],
                   }
     """
     all_params = {
+        'learning_rate': 0.1,
+        #'is_unbalance': 'true', # replaced with scale_pos_weight argument
+        'num_leaves': 15,  # 2^max_depth - 1
+        'max_depth': 4,  # -1 means no limit
+        'min_child_samples': 100,  # Minimum number of data need in a child(min_data_in_leaf)
+        #'max_bin': 100,  # Number of bucketed bin for feature values
+        'subsample': 0.7,  # Subsample ratio of the training instance.
+        'subsample_freq': 1,  # frequence of subsample, <=0 means no enable
+        'colsample_bytree': 0.9,  # Subsample ratio of columns when constructing each tree.
+        'min_child_weight': 0,  # Minimum sum of instance weight(hessian) needed in a child(leaf)
+        'scale_pos_weight': 99,  # because training data is extremely unbalanced
         'boosting_type': 'gbdt',
         'objective': 'binary',
         'metric': 'auc',
-        'learning_rate': 0.01,
+
         #'is_unbalance': 'true',  #because training data is unbalance (replaced with scale_pos_weight)
-        'num_leaves': 31,  # we should let it be smaller than 2^(max_depth)
-        'max_depth': -1,  # -1 means no limit
-        'min_child_samples': 20,  # Minimum number of data need in a child(min_data_in_leaf)
         'max_bin': 255,  # Number of bucketed bin for feature values
-        'subsample': 0.6,  # Subsample ratio of the training instance.
-        'subsample_freq': 0,  # frequence of subsample, <=0 means no enable
-        'colsample_bytree': 0.3,  # Subsample ratio of columns when constructing each tree.
-        'min_child_weight': 5,  # Minimum sum of instance weight(hessian) needed in a child(leaf)
         'subsample_for_bin': 200000,  # Number of samples for constructing bin
         'min_split_gain': 0,  # lambda_l1, lambda_l2 and min_gain_to_split to regularization
         'reg_alpha': 0,  # L1 regularization term on weights
         'reg_lambda': 0,  # L2 regularization term on weights
-        'nthread': 8,
-        'verbose': -1,
+        'nthread': 4,
+        'verbose': 0,
     }
     all_params = {k: [v] for k, v in all_params.items()}
     """
@@ -242,7 +249,7 @@ def train():
                     train_data,
                     int(trees * 1.1),
                     valid_sets=[train_data],
-                    verbose_eval=30
+                    verbose_eval=10
                     )
     logger.info('train end')
     with open(DIR + 'model.pkl', 'wb') as f:

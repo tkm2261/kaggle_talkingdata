@@ -8,311 +8,32 @@ logger = getLogger(None)
 
 import copy
 
-DTYPE = {
-    'click_id': np.float32,
-    #'ip': np.float32,
-    'app': np.float32,
-    #    'click_diff_1': np.float32,
-    #    'click_diff_2': np.float32,
-    #    'click_diff_3': np.float32,
-    #    'click_diff_4': np.float32,
-    #    'click_diff_5': np.float32,
-    'avg_ipdayhour': np.float32,
-    #    'avg_ipdayhour_1': np.float32,
-    #    'avg_ipdayhour_2': np.float32,
-    #    'avg_ipdayhour_3': np.float32,
-    #    'avg_ipdayhour_4': np.float32,
-    'avg_ip': np.float32,
-    #    'avg_ip_1': np.float32,
-    #    'avg_ip_2': np.float32,
-    #    'avg_ip_3': np.float32,
-    #    'avg_ip_4': np.float32,
-    #    'app_1': np.float32,
-    #    'app_2': np.float32,
-    #    'app_3': np.float32,
-    #    'app_4': np.float32,
-    'device': np.float32,
-    #    'device_1': np.float32,
-    #    'device_2': np.float32,
-    #    'device_3': np.float32,
-    #    'device_4': np.float32,
-    'os': np.float32,
-    #    'os_1': np.float32,
-    #    'os_2': np.float32,
-    #    'os_3': np.float32,
-    #    'os_4': np.float32,
-    'channel': np.float32,
-    #    'channel_1': np.float32,
-    #    'channel_2': np.float32,
-    #    'channel_3': np.float32,
-    #    'channel_4': np.float32,
-    'is_attributed': np.float32,
-    #    'is_attributed_1': np.float32,
-    #    'is_attributed_2': np.float32,
-    #    'is_attributed_3': np.float32,
-    #    'is_attributed_4': np.float32,
-    #    'is_attributed_5': np.float32,
-    'hour': np.float32,
-    #    'hour_1': np.float32,
-    #    'hour_2': np.float32,
-    #    'hour_3': np.float32,
-    #    'hour_4': np.float32,
-    'minute': np.float32,
-    #    'minute_1': np.float32,
-    #    'minute_2': np.float32,
-    #    'minute_3': np.float32,
-    #    'minute_4': np.float32,
-    'second': np.float32,
-    #    'second_1': np.float32,
-    #    'second_2': np.float32,
-    #    'second_3': np.float32,
-    #    'second_4': np.float32,
-    'avg_app': np.float32,
-    #    'avg_app_1': np.float32,
-    #    'avg_app_2': np.float32,
-    #    'avg_app_3': np.float32,
-    #    'avg_app_4': np.float32,
-    'avg_device': np.float32,
-    #    'avg_device_1': np.float32,
-    #    'avg_device_2': np.float32,
-    #    'avg_device_3': np.float32,
-    #    'avg_device_4': np.float32,
-    'avg_os': np.float32,
-    #    'avg_os_1': np.float32,
-    #    'avg_os_2': np.float32,
-    #    'avg_os_3': np.float32,
-    #    'avg_os_4': np.float32,
-    'avg_channel': np.float32,
-    #    'avg_channel_1': np.float32,
-    #    'avg_channel_2': np.float32,
-    #    'avg_channel_3': np.float32,
-    #    'avg_channel_4': np.float32,
-    'avg_hour': np.float32,
-    #    'avg_hour_1': np.float32,
-    #    'avg_hour_2': np.float32,
-    #    'avg_hour_3': np.float32,
-    #    'avg_hour_4': np.float32,
-    'avg_ip_span': np.float32,
-    #    'avg_ip_span_1': np.float32,
-    #    'avg_ip_span_2': np.float32,
-    #    'avg_ip_span_3': np.float32,
-    #    'avg_ip_span_4': np.float32,
-    'avg_minute': np.float32,
-    #    'avg_minute_1': np.float32,
-    #    'avg_minute_2': np.float32,
-    #    'avg_minute_3': np.float32,
-    #    'avg_minute_4': np.float32,
-    'avg_second': np.float32,
-    #    'avg_second_1': np.float32,
-    #    'avg_second_2': np.float32,
-    #    'avg_second_3': np.float32,
-    #    'avg_second_4': np.float32,
-    'avg_app2': np.float32,
-    #    'avg_app2_1': np.float32,
-    #    'avg_app2_2': np.float32,
-    #    'avg_app2_3': np.float32,
-    #    'avg_app2_4': np.float32,
-    'avg_device2': np.float32,
-    #    'avg_device2_1': np.float32,
-    #    'avg_device2_2': np.float32,
-    #    'avg_device2_3': np.float32,
-    #    'avg_device2_4': np.float32,
-    'avg_os2': np.float32,
-    #    'avg_os2_1': np.float32,
-    #    'avg_os2_2': np.float32,
-    #    'avg_os2_3': np.float32,
-    #    'avg_os2_4': np.float32,
-    'avg_channel2': np.float32,
-    #    'avg_channel2_1': np.float32,
-    #    'avg_channel2_2': np.float32,
-    #    'avg_channel2_3': np.float32,
-    #    'avg_channel2_4': np.float32,
-    'avg_hour2': np.float32,
-    #    'avg_hour2_1': np.float32,
-    #    'avg_hour2_2': np.float32,
-    #    'avg_hour2_3': np.float32,
-    #    'avg_hour2_4': np.float32,
-    'avg_ip_span2': np.float32,
-    #    'avg_ip_span2_1': np.float32,
-    #    'avg_ip_span2_2': np.float32,
-    #    'avg_ip_span2_3': np.float32,
-    #    'avg_ip_span2_4': np.float32,
-    'cnt_app': np.float32,
-    #    'cnt_app_1': np.float32,
-    #    'cnt_app_2': np.float32,
-    #    'cnt_app_3': np.float32,
-    #    'cnt_app_4': np.float32,
-    'cnt_device': np.float32,
-    #    'cnt_device_1': np.float32,
-    #    'cnt_device_2': np.float32,
-    #    'cnt_device_3': np.float32,
-    #    'cnt_device_4': np.float32,
-    'cnt_os': np.float32,
-    #    'cnt_os_1': np.float32,
-    #    'cnt_os_2': np.float32,
-    #    'cnt_os_3': np.float32,
-    #    'cnt_os_4': np.float32,
-    'cnt_channel': np.float32,
-    #    'cnt_channel_1': np.float32,
-    #    'cnt_channel_2': np.float32,
-    #    'cnt_channel_3': np.float32,
-    #    'cnt_channel_4': np.float32,
-    'cnt_hour': np.float32,
-    #    'cnt_hour_1': np.float32,
-    #    'cnt_hour_2': np.float32,
-    #    'cnt_hour_3': np.float32,
-    #    'cnt_hour_4': np.float32,
-    'cnt_ip_span': np.float32,
-    #    'cnt_ip_span_1': np.float32,
-    #    'cnt_ip_span_2': np.float32,
-    #    'cnt_ip_span_3': np.float32,
-    #    'cnt_ip_span_4': np.float32,
-    'cnt_minute': np.float32,
-    #    'cnt_minute_1': np.float32,
-    #    'cnt_minute_2': np.float32,
-    #    'cnt_minute_3': np.float32,
-    #    'cnt_minute_4': np.float32,
-    'cnt_second': np.float32,
-    #    'cnt_second_1': np.float32,
-    #    'cnt_second_2': np.float32,
-    #    'cnt_second_3': np.float32,
-    #    'cnt_second_4': np.float32,
-    'cnt_app2': np.float32,
-    #    'cnt_app2_1': np.float32,
-    #    'cnt_app2_2': np.float32,
-    #    'cnt_app2_3': np.float32,
-    #    'cnt_app2_4': np.float32,
-    'cnt_device2': np.float32,
-    #    'cnt_device2_1': np.float32,
-    #    'cnt_device2_2': np.float32,
-    #    'cnt_device2_3': np.float32,
-    #    'cnt_device2_4': np.float32,
-    'cnt_os2': np.float32,
-    #    'cnt_os2_1': np.float32,
-    #    'cnt_os2_2': np.float32,
-    #    'cnt_os2_3': np.float32,
-    #    'cnt_os2_4': np.float32,
-    'cnt_channel2': np.float32,
-    #    'cnt_channel2_1': np.float32,
-    #    'cnt_channel2_2': np.float32,
-    #    'cnt_channel2_3': np.float32,
-    #    'cnt_channel2_4': np.float32,
-    'cnt_hour2': np.float32,
-    #    'cnt_hour2_1': np.float32,
-    #    'cnt_hour2_2': np.float32,
-    #    'cnt_hour2_3': np.float32,
-    #    'cnt_hour2_4': np.float32,
-    'cnt_ip_span2': np.float32,
-    #    'cnt_ip_span2_1': np.float32,
-    #    'cnt_ip_span2_2': np.float32,
-    #    'cnt_ip_span2_3': np.float32,
-    #    'cnt_ip_span2_4': np.float32,
-}
-"""
-DTYPE = {
- 'click_id': np.float32,
- 'app': np.float32,
- 'app_1': np.float32,
- 'app_2': np.float32,
- 'app_3': np.float32,
- 'app_4': np.float32,
- 'device': np.float32,
- 'device_1': np.float32,
- 'device_2': np.float32,
- 'device_3': np.float32,
- 'device_4': np.float32,
- 'os': np.float32,
- 'os_1': np.float32,
- 'os_2': np.float32,
- 'os_3': np.float32,
- 'os_4': np.float32,
- 'channel': np.float32,
- 'channel_1': np.float32,
- 'channel_2': np.float32,
- 'channel_3': np.float32,
- 'channel_4': np.float32,
- 'is_attributed': np.float32,
- 'is_attributed_1': np.float32,
- 'is_attributed_2': np.float32,
- 'is_attributed_3': np.float32,
- 'is_attributed_4': np.float32,
- 'is_attributed_5': np.float32,
- 'hour': np.float32,
- 'hour_1': np.float32,
- 'hour_2': np.float32,
- 'hour_3': np.float32,
- 'hour_4': np.float32,
- 'minute': np.float32,
- 'minute_1': np.float32,
- 'minute_2': np.float32,
- 'minute_3': np.float32,
- 'minute_4': np.float32,
- 'second': np.float32,
- 'second_1': np.float32,
- 'second_2': np.float32,
- 'second_3': np.float32,
- 'second_4': np.float32,
- 'avg_app': np.float32,
- 'avg_app_1': np.float32,
- 'avg_app_2': np.float32,
- 'avg_app_3': np.float32,
- 'avg_app_4': np.float32,
- 'avg_device': np.float32,
- 'avg_device_1': np.float32,
- 'avg_device_2': np.float32,
- 'avg_device_3': np.float32,
- 'avg_device_4': np.float32,
- 'avg_os': np.float32,
- 'avg_os_1': np.float32,
- 'avg_os_2': np.float32,
- 'avg_os_3': np.float32,
- 'avg_os_4': np.float32,
- 'avg_channel': np.float32,
- 'avg_channel_1': np.float32,
- 'avg_channel_2': np.float32,
- 'avg_channel_3': np.float32,
- 'avg_channel_4': np.float32,
- 'avg_hour': np.float32,
- 'avg_hour_1': np.float32,
- 'avg_hour_2': np.float32,
- 'avg_hour_3': np.float32,
- 'avg_hour_4': np.float32,
- 'avg_ipdayhour': np.float32,
- 'avg_ipdayhour_1': np.float32,
- 'avg_ipdayhour_2': np.float32,
- 'avg_ipdayhour_3': np.float32,
- 'avg_ipdayhour_4': np.float32,
- 'avg_ip': np.float32,
- 'avg_ip_1': np.float32,
- 'avg_ip_2': np.float32,
- 'avg_ip_3': np.float32,
- 'avg_ip_4': np.float32,
- 'avg_ip_span': np.float32,
- 'avg_ip_span_1': np.float32,
- 'avg_ip_span_2': np.float32,
- 'avg_ip_span_3': np.float32,
- 'avg_ip_span_4': np.float32,
- 'click_diff_1': np.float32,
- 'click_diff_2': np.float32,
- 'click_diff_3': np.float32,
- 'click_diff_4': np.float32,
- 'click_diff_5': np.float32
-} 
-"""
+LIST_COL = ['span', 'click_id', 'app', 'channel', 'is_attributed', 'cnt_dayiphourapp', 'cnt_ch', 'cnt_ip',
+            'dist_channel', 'dist_os', 'dist_app', 'dist_device', 'cnt_dayipchannel']
 
 
 def read_csv(path):
-    dtype = copy.deepcopy(DTYPE)
-    if 'test' in path:
-        dtype['click_id'] = np.int64
+    # dtype = copy.deepcopy(DTYPE)
+    # if 'test' in path:
+    #    dtype['click_id'] = np.int64
 
-    df = pd.read_csv(path, dtype=dtype, usecols=list(dtype.keys()))
-    # df = pd.read_csv(path)  # [list(dtype.keys())]
+    # df = pd.read_csv(path, dtype=dtype, usecols=list(dtype.keys()))
+    df = pd.read_csv(path)  # , usecols=LIST_COL)  # [list(dtype.keys())]
+    df.drop(['ip', 'day'] + ['dist_channel', 'dist_os', 'dist_app',
+                             'dist_device'] + ['cnt_dayspanipapp', 'cnt_dayspanipos', 'cnt_dayspanipdevice'], axis=1, inplace=True, errors='ignore')
+
+    for col in df:
+        if col == 'click_id' and 'test' in path:
+            df[col] = df[col].astype(np.int64)
+        else:
+            df[col] = df[col].astype(np.float32)
+    df = df[df['span'] > 0]
+    df.drop(['span'], axis=1, inplace=True)
     return df
 
 
 def load_train_data():
-    paths = sorted(glob.glob('../data/dmt_train_span/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_train_cnt/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -320,7 +41,7 @@ def load_train_data():
 
 
 def load_valid_data():
-    paths = sorted(glob.glob('../data/dmt_valid_span/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_valid_cnt/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -328,7 +49,7 @@ def load_valid_data():
 
 
 def load_test_data():
-    paths = sorted(glob.glob('../data/dmt_test_span/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_test_cnt/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -336,7 +57,8 @@ def load_test_data():
 
 
 def load_all_data():
-    paths = sorted(glob.glob('../data/dmt_train_span/*.csv.gz')) + sorted(glob.glob('../data/dmt_valid_span/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_train_cnt/*.csv.gz')) + \
+        sorted(glob.glob('../data/dmt_valid_cnt/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
