@@ -8,8 +8,8 @@ logger = getLogger(None)
 
 import copy
 
-LIST_COL = ['span', 'click_id', 'app', 'channel', 'is_attributed', 'cnt_dayiphourapp', 'cnt_ch', 'cnt_ip',
-            'dist_channel', 'dist_os', 'dist_app', 'dist_device', 'cnt_dayipchannel']
+LIST_COL = ['span', 'click_id', 'is_attributed', 'channel', 'os', 'app', 'hour', 'rt_dayhouripos', 'cnt_dayiphourapp', 'diff_all', 'rt_dayhouripdevice',
+            'diff_dayhouripos', 'cnt_dayhouripos', 'diff_dayiphourapp', 'rt_dayhouripapp', 'cnt_dayhouripdevice', 'cnt_dayhouripapp', 'diff_dayhouripapp']
 
 
 def read_csv(path):
@@ -19,8 +19,9 @@ def read_csv(path):
 
     # df = pd.read_csv(path, dtype=dtype, usecols=list(dtype.keys()))
     df = pd.read_csv(path)  # , usecols=LIST_COL)  # [list(dtype.keys())]
-    df.drop(['ip', 'day'] + ['dist_channel', 'dist_os', 'dist_app',
-                             'dist_device'] + ['cnt_dayspanipapp', 'cnt_dayspanipos', 'cnt_dayspanipdevice'], axis=1, inplace=True, errors='ignore')
+    df.drop(['ip', 'day', 'cnt_ch_day'] + ['dist_channel', 'dist_os', 'dist_app',
+                                           'dist_device'] + ['cnt_dayspanipapp', 'cnt_dayspanipos', 'cnt_dayspanipdevice']
+            + ['cnt_dayhourapp', 'cnt_dayhouros', 'cnt_dayhourdevice'], axis=1, inplace=True, errors='ignore')
 
     for col in df:
         if col == 'click_id' and 'test' in path:
@@ -33,7 +34,8 @@ def read_csv(path):
 
 
 def load_train_data():
-    paths = sorted(glob.glob('../data/dmt_train_cnt/*.csv.gz'))
+    # + sorted(glob.glob('../data/dmt_prev_cnt3/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_train_cnt3/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -41,7 +43,7 @@ def load_train_data():
 
 
 def load_valid_data():
-    paths = sorted(glob.glob('../data/dmt_valid_cnt/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_valid_cnt3/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -49,7 +51,7 @@ def load_valid_data():
 
 
 def load_test_data():
-    paths = sorted(glob.glob('../data/dmt_test_cnt/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_test_cnt3/*.csv.gz'))
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
@@ -57,8 +59,10 @@ def load_test_data():
 
 
 def load_all_data():
-    paths = sorted(glob.glob('../data/dmt_train_cnt/*.csv.gz')) + \
-        sorted(glob.glob('../data/dmt_valid_cnt/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_train_cnt3/*.csv.gz')) + \
+        sorted(glob.glob('../data/dmt_valid_cnt3/*.csv.gz'))
+    # sorted(glob.glob('../data/dmt_prev_cnt3/*.csv.gz'))
+
     with Pool() as p:
         df = pd.concat(p.map(read_csv, paths), ignore_index=True, axis=0, copy=False)
     logger.info('data size {}'.format(df.shape))
