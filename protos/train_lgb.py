@@ -23,6 +23,7 @@ DIR = 'result_tmp/'  # sys.argv[1]  # 'result_1008_rate001/'
 print(DIR)
 
 from numba import jit
+CAT_FEAT = ['app', 'os', 'channel', 'hour']
 
 
 def consist_score(label, pred):
@@ -65,7 +66,7 @@ def callback(data):
 def train():
 
     #df.to_pickle('train.pkl', protocol=-1)
-    df = load_all_data()  # .sample(10000000, random_state=42).reset_index(drop=True)
+    df = load_train_data()  # .sample(10000000, random_state=42).reset_index(drop=True)
     '''
     # df = pd.read_pickle('train.pkl')  # .tail(50000000).reset_index(drop=True)
     pos = df[df.is_attributed == 1]
@@ -90,15 +91,15 @@ def train():
     logger.info('train data size {}'.format(df.shape))
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
 
-    train, test = next(cv.split(df, df.is_attributed))
+    #train, test = next(cv.split(df, df.is_attributed))
 
-    x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32).loc[train].reset_index(drop=True)
-    y_train = df.is_attributed.astype(int).values[train]
+    x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)  # .loc[train].reset_index(drop=True)
+    y_train = df.is_attributed.astype(int)  # .values[train]
 
-    # df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
+    df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
     logger.info('valid data size {}'.format(df.shape))
-    x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32).loc[test].reset_index(drop=True)
-    y_valid = df.is_attributed.astype(int).values[test]
+    x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)  # .loc[test].reset_index(drop=True)
+    y_valid = df.is_attributed.astype(int)  # .values[test]
 
     del df
     gc.collect()
@@ -108,7 +109,7 @@ def train():
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
     # {'colsample_bytree': 0.9, 'learning_rate': 0.1, 'max_bin': 255, 'max_depth': -1, 'metric': 'auc', 'min_child_weight': 20, 'min_split_gain': 0, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 1, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
     all_params = {'min_child_weight': [20],
-                  'subsample': [1.0],
+                  'subsample': [1],
                   'subsample_freq': [1],
                   'seed': [114],
                   'colsample_bytree': [0.9],
@@ -167,8 +168,8 @@ def train():
             trn_y = y_train
             val_y = y_valid
 
-            train_data = lgb.Dataset(trn_x, label=trn_y)
-            test_data = lgb.Dataset(val_x, label=val_y)
+            train_data = lgb.Dataset(trn_x, label=trn_y, categorical_feature=CAT_FEAT)
+            test_data = lgb.Dataset(val_x, label=val_y, categorical_feature=CAT_FEAT)
             clf = lgb.train(params,
                             train_data,
                             10000,  # params['n_estimators'],
@@ -201,7 +202,6 @@ def train():
             with open(DIR + 'model_%s.pkl' % cnt, 'wb') as f:
                 pickle.dump(clf, f, -1)
             del trn_x
-            del clf
             gc.collect()
 
         with open(DIR + 'train_cv_tmp.pkl', 'wb') as f:
@@ -225,6 +225,13 @@ def train():
         logger.info('best score: {} {}'.format(min_score[use_score], min_score))
         logger.info('best params: {}'.format(min_params))
 
+    imp = pd.DataFrame(clf.feature_importance(), columns=['imp'])
+    imp['col'] = usecols
+    n_features = imp.shape[0]
+    imp = imp.sort_values('imp', ascending=False)
+    imp.to_csv(DIR + 'feature_importances_0.csv')
+    logger.info('imp use {} {}'.format(imp[imp.imp > 0].shape, n_features))
+
     del val_x
     del trn_y
     del val_y
@@ -241,7 +248,59 @@ def train():
     gc.collect()
     logger.info('all data size {}'.format(x_train.shape))
 
-    train_data = lgb.Dataset(x_train, label=y_train)
+    train_data = lgb.Dataset(x_train.values.astype(np.float32), label=y_train,
+                             categorical_feature=CAT_FEAT, feature_name=x_train.columns.values.tolist())
+    del x_train
+    gc.collect()
+    logger.info('train start')
+    clf = lgb.train(min_params,
+                    train_data,
+                    int(trees * 1.1),
+                    valid_sets=[train_data],
+                    verbose_eval=10
+                    )
+    logger.info('train end')
+    with open(DIR + 'model.pkl', 'wb') as f:
+        pickle.dump(clf, f, -1)
+    #del x_train
+    gc.collect()
+
+    logger.info('save end')
+
+
+def train2():
+
+    df = load_all_data()  # .sample(10000000, random_state=42).reset_index(drop=True)
+    x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)  # .loc[train].reset_index(drop=True)
+    y_train = df.is_attributed.astype(int)  # .values[train]
+
+    del df
+    gc.collect()
+    all_params = {'min_child_weight': [20],
+                  'subsample': [1],
+                  'subsample_freq': [1],
+                  'seed': [114],
+                  'colsample_bytree': [0.9],
+                  'learning_rate': [0.1],
+                  'max_depth': [-1],
+                  'min_split_gain': [0],
+                  'reg_alpha': [0],
+                  'max_bin': [255],
+                  'num_leaves': [127],
+                  'objective': ['binary'],
+                  'metric': ['auc'],
+                  'scale_pos_weight': [1],
+                  'verbose': [-1],
+                  }
+    for min_params in tqdm(list(ParameterGrid(all_params))):
+        pass
+    trees = 372
+
+    gc.collect()
+    logger.info('all data size {}'.format(x_train.shape))
+
+    train_data = lgb.Dataset(x_train.values.astype(np.float32), label=y_train,
+                             categorical_feature=CAT_FEAT, feature_name=x_train.columns.values.tolist())
     del x_train
     gc.collect()
     logger.info('train start')
@@ -282,7 +341,8 @@ def predict():
             df[col] = np.zeros(df.shape[0])
             logger.info('no col %s' % col)
 
-    x_test = df[usecols].fillna(-100)
+    x_test = df[usecols]
+
     if x_test.shape[1] != n_features:
         raise Exception('Not match feature num: %s %s' % (x_test.shape[1], n_features))
 
@@ -321,4 +381,5 @@ if __name__ == '__main__':
     logger.addHandler(handler)
 
     train()
+    # train2()
     predict()
