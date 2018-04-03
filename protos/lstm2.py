@@ -10,21 +10,21 @@ import tensorflow as tf
 
 MAX_SEQUENCE_LENGTH = 5
 
-LIST_COL = ['app', 'device', 'os', 'channel', 'hour',  # 'sum_attr', 'last_attr',
-            #'ip',
-            'avg_ip', 'avg_app', 'avg_device', 'avg_os', 'avg_channel', 'avg_day', 'avg_hour', 'avg_ipdayhour']
+LIST_COL = ['app', 'device', 'os', 'channel', 'hour',  'minute', 'second', 'click_diff',
+            'avg_ip', 'avg_app', 'avg_device', 'avg_os', 'avg_channel', 'avg_hour', 'avg_ipdayhour', 'avg_ip_span']
 
 LIST_CONV_COL = ['avg_avg', 'max_avg', 'min_avg']
 
 LIST_ALL_COL = LIST_COL + LIST_CONV_COL + ['is_attributed']
 
-LIST_CAT_COL = ['app', 'device', 'os', 'channel', 'hour']
+LIST_CAT_COL = ['app', 'device', 'os', 'channel', 'hour', 'minute', 'second']
 
-LIST_FLOAT_COL = ['avg_ip', 'avg_app', 'avg_device', 'avg_os', 'avg_channel', 'avg_day', 'avg_hour', 'avg_ipdayhour']
+LIST_FLOAT_COL = ['avg_ip', 'avg_app', 'avg_device', 'avg_os',
+                  'avg_channel', 'avg_hour', 'avg_ipdayhour', 'avg_ip_span']
 
 LIST_DATA_COL = LIST_CAT_COL + LIST_FLOAT_COL
 
-MAP_COL_NUM = {'app': 706, 'device': 3475, 'os': 800, 'channel': 202, 'hour': 24}
+MAP_COL_NUM = {'app': 706, 'device': 3475, 'os': 800, 'channel': 202, 'hour': 24, 'minute': 60, 'second': 60}
 
 
 def custom_objective(y_true, y_pred):

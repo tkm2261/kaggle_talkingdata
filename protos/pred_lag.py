@@ -82,66 +82,44 @@ def calc_batch_num(paths):
 
 
 def data_generator(paths, repeat=True):
-    for path in paths:
-        logger.debug(path)
-        sv = 'cache_lag/test/' + path.split('/')[-1].split('.')[0] + '.gz'
-        if os.path.exists(sv):
-            df = pd.read_pickle(sv)
-        else:
-            df = pd.read_csv(path, dtype=DTYPE)
-            # df.to_pickle(sv, protocol=-1)
-        df = df.take(np.random.permutation(len(df))).reset_index(drop=True).fillna(-1)
-        for start in range(0, df.shape[0], batch_size):
-            end = min(start + batch_size, df.shape[0])
-            data = df.iloc[start:end]
+    while True:
+        for path in paths:
+            logger.debug(path)
+            df = pd.read_csv(path, dtype=DTYPE).fillna(-1)
+            for start in range(0, df.shape[0], batch_size):
+                end = min(start + batch_size, df.shape[0])
+                data = df.iloc[start:end].copy()
+                targets = np.array(data['click_id'].values)
 
-            targets = np.array(data['click_id'].values)
+                inputs = []
+                for col in LIST_COL:
+                    if col in ['sum_attr', 'last_attr', 'ip']:
+                        cols = [col for i in range(5)]
+                    elif col == 'click_diff':
+                        cols = [f'{col}_{i}' for i in range(1, 6)[::1]]
+                    else:
+                        cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
+                    inputs.append(data[cols].values)
 
-            inputs = []
-            for col in LIST_COL:
-                if col in ['sum_attr', 'last_attr', 'ip']:
-                    cols = [col for i in range(5)]
-                else:
-                    cols = [f'{col}_{i}' for i in range(1, 5)[::-1]] + [col]
-                inputs.append(data[cols].values)
+                inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].mean(axis=1)
+                                        for i in range(0, 5)[::-1]]).T)
+                inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].max(axis=1)
+                                        for i in range(0, 5)[::-1]]).T)
+                inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].min(axis=1)
+                                        for i in range(0, 5)[::-1]]).T)
 
-            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].mean(axis=1)
-                                    for i in range(0, 5)[::-1]]).T)
-            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].max(axis=1)
-                                    for i in range(0, 5)[::-1]]).T)
-            inputs.append(np.array([data[[f'{col}_{i}' if i > 0 else col for col in LIST_FLOAT_COL]].min(axis=1)
-                                    for i in range(0, 5)[::-1]]).T)
+                inputs.append(data[[f'is_attributed_{i}' for i in range(1, 6)[::-1]]].values)
 
-            inputs.append(data[[f'is_attributed_{i}' for i in range(1, 6)[::-1]]].values)
+                x_batch = inputs
+                y_batch = targets
 
-            x_batch = inputs
-            y_batch = targets
-
-            yield x_batch, y_batch
+                yield x_batch, y_batch
+            del df
+            gc.collect()
+        break
 
 
 from sklearn.metrics import roc_auc_score
-
-
-class LoggingCallback(Callback):
-    """Callback that logs message at end of epoch.
-    """
-
-    def __init__(self, valid_path):
-        self.valid_path = valid_path
-        self.valid_data = list(data_generator(self.valid_path, repeat=False))
-
-    def on_epoch_end(self, epoch, logs={}):
-        labels = []
-        preds = []
-        for x_batch, y_batch in self.valid_data:
-
-            labels += y_batch.tolist()
-            pred = self.model.predict_on_batch(x_batch)[:, 0]
-            preds += pred.tolist()  # x_batch[:, 7].tolist()
-        auc = roc_auc_score(labels, preds)
-        msg = "Epoch: %i, %s" % (epoch, ", ".join("%s: %f" % (k, logs[k]) for k in sorted(logs))) + f', auc: {auc}'
-        logger.info(msg)
 
 
 from sklearn.metrics import roc_auc_score
@@ -155,6 +133,7 @@ def producer(queue, paths, model):
         cnt += 1
         click_ids = y_batch.tolist()
         pred = model.predict_on_batch(x_batch)[:, 0]
+
         queue.append((cnt, click_ids, pred))
 
 
@@ -185,7 +164,7 @@ def main():
     logger.addHandler(handler)
 
     logger.info(f'file: {param_file}, params: {model_params}')
-    paths = sorted(glob.glob('../data/dmt_test_lag2/*.csv.gz'))
+    paths = sorted(glob.glob('../data/dmt_test_lstm/*.csv.gz'))
 
     model = get_lstm_sin(**model_params)
     model.load_weights(filepath='weights/best_weights.hdf5')
