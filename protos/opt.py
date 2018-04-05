@@ -23,7 +23,10 @@ DIR = 'result_tmp/'  # sys.argv[1]  # 'result_1008_rate001/'
 print(DIR)
 
 from numba import jit
-CAT_FEAT = ['app', 'os', 'channel']
+CAT_FEAT = ['app', 'os']
+
+LIST_DROP_COL = ['channel', 'cnt_os', 'cnt_dayhouripappos', 'cnt_ch', 'cnt_dayhouripos', 'cnt_dayhouripchannel', 'cnt_os_r', 'cnt_nochannel', 'cnt_dayhouripapp', 'cnt_ch_r', 'cnt_dayhouripappchannel',
+                 'cnt_dayhouripappdevice', 'cnt_ip_r', 'cnt_dayiphourapp', 'cnt_dayhouripchanneldevice', 'cnt_dayhouripchannelos', 'cnt_app', 'cnt_ch_app', 'cnt_app_r', 'cnt_dayhouripdevice', 'cnt_ch_app_r', 'cnt_dayhouriosdevice', 'cnt_ip']
 
 
 def consist_score(label, pred):
@@ -95,16 +98,18 @@ def train():
                   'max_depth': [-1],
                   'min_split_gain': [0],
                   'reg_alpha': [0],
-                  'max_bin': [255],
+                  'max_bin': [63],
                   'num_leaves': [127],
                   'objective': ['binary'],
                   'metric': ['auc'],
                   'scale_pos_weight': [1],
                   'verbose': [-1],
-                  'drop': list(range(len(usecols)))
+                  'device': ['gpu'],
+                  'drop': list(range(1, len(LIST_DROP_COL)))
                   }
     use_score = 0
     min_score = (100, 100, 100)
+    drop_cols = LIST_DROP_COL[:1]
     import copy
     for params in tqdm(list(ParameterGrid(all_params))):
         cnt = -1
@@ -121,13 +126,13 @@ def train():
 
             _params = copy.deepcopy(params)
             drop_idx = _params.pop('drop')
-            drop_col = usecols[drop_idx]
+            drop_col = drop_cols + [LIST_DROP_COL[drop_idx]]
             params['drop'] = drop_col
 
             trn_x.drop(drop_col, axis=1, inplace=True)
             val_x.drop(drop_col, axis=1, inplace=True)
-            cat_feat = [col for col in CAT_FEAT if col != drop_col]
-            cols = [col for col in usecols if col != drop_col]
+            cat_feat = CAT_FEAT
+            cols = trn_x.columns.values.tolist()
             train_data = lgb.Dataset(trn_x.values.astype(np.float32), label=trn_y,
                                      categorical_feature=cat_feat, feature_name=cols)
             test_data = lgb.Dataset(val_x.values.astype(np.float32), label=val_y,
@@ -144,13 +149,13 @@ def train():
                             # callbacks=[callback],
                             verbose_eval=10
                             )
-            pred = clf.predict(val_x)
+            pred = clf.predict(val_x.values.astype(np.float32))
 
             # all_pred[test] = pred
 
             _score2 = log_loss(val_y, pred)
             _score = - roc_auc_score(val_y, pred)
-
+            logger.info(f'drop: {drop_col}')
             logger.info('   _score: %s' % _score)
             logger.info('   _score2: %s' % _score2)
 
@@ -161,6 +166,7 @@ def train():
         if min_score[use_score] > score[use_score]:
             min_score = score
             min_params = params
+            drop_cols = drop_col
         logger.info('best score: {} {}'.format(min_score[use_score], min_score))
         logger.info('best params: {}'.format(min_params))
 
