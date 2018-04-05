@@ -105,11 +105,11 @@ def train():
                   'scale_pos_weight': [1],
                   'verbose': [-1],
                   'device': ['gpu'],
-                  'drop': list(range(1, len(LIST_DROP_COL)))
+                  'drop': list(range(0, len(LIST_DROP_COL)))
                   }
     use_score = 0
     min_score = (100, 100, 100)
-    drop_cols = LIST_DROP_COL[:1]
+    drop_cols = []
     import copy
     for params in tqdm(list(ParameterGrid(all_params))):
         cnt = -1
