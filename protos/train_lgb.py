@@ -23,7 +23,7 @@ DIR = 'result_tmp/'  # sys.argv[1]  # 'result_1008_rate001/'
 print(DIR)
 
 from numba import jit
-CAT_FEAT = ['app', 'os', 'channel', 'hour']
+CAT_FEAT = ['app', 'os']
 
 
 def consist_score(label, pred):
@@ -91,7 +91,7 @@ def train():
     logger.info('train data size {}'.format(df.shape))
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
 
-    #train, test = next(cv.split(df, df.is_attributed))
+    train, test = next(cv.split(df, df.is_attributed))
 
     x_train = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)  # .loc[train].reset_index(drop=True)
     y_train = df.is_attributed.astype(int)  # .values[train]
@@ -100,7 +100,19 @@ def train():
     logger.info('valid data size {}'.format(df.shape))
     x_valid = df.drop(['is_attributed', 'click_id'], axis=1).astype(np.float32)  # .loc[test].reset_index(drop=True)
     y_valid = df.is_attributed.astype(int)  # .values[test]
+    """
+    y_train = df.is_attributed.astype(int).values[train]
+    y_valid = df.is_attributed.astype(int).values[test]
 
+    df.drop(['is_attributed', 'click_id'], axis=1, inplace=True)
+    x_train = df.loc[train]
+    x_train.reset_index(drop=True, inplace=True)
+
+    # df = load_valid_data()  # .sample(x_train.shape[0], random_state=42).reset_index(drop=True)
+    logger.info('valid data size {}'.format(df.shape))
+    x_valid = df.loc[test]
+    x_valid.reset_index(drop=True, inplace=True)
+    """
     del df
     gc.collect()
     usecols = x_train.columns.values
@@ -120,8 +132,8 @@ def train():
                   'max_bin': [255],
                   'num_leaves': [127],
                   'objective': ['binary'],
-                  'metric': ['auc'],
-                  'scale_pos_weight': [1],
+                  'metric': ['binary_logloss'],
+                  'scale_pos_weight': [100],
                   'verbose': [-1],
                   }
     """
@@ -167,9 +179,12 @@ def train():
             val_x = x_valid
             trn_y = y_train
             val_y = y_valid
-
-            train_data = lgb.Dataset(trn_x, label=trn_y, categorical_feature=CAT_FEAT)
-            test_data = lgb.Dataset(val_x, label=val_y, categorical_feature=CAT_FEAT)
+            train_data = lgb.Dataset(trn_x.values.astype(np.float32), label=trn_y,
+                                     categorical_feature=CAT_FEAT, feature_name=x_train.columns.values.tolist())
+            test_data = lgb.Dataset(val_x.values.astype(np.float32), label=val_y,
+                                    categorical_feature=CAT_FEAT, feature_name=x_train.columns.values.tolist())
+            del trn_x
+            gc.collect()
             clf = lgb.train(params,
                             train_data,
                             10000,  # params['n_estimators'],
@@ -201,7 +216,6 @@ def train():
                 pickle.dump(pred, f, -1)
             with open(DIR + 'model_%s.pkl' % cnt, 'wb') as f:
                 pickle.dump(clf, f, -1)
-            del trn_x
             gc.collect()
 
         with open(DIR + 'train_cv_tmp.pkl', 'wb') as f:
@@ -223,6 +237,7 @@ def train():
             min_score = score
             min_params = params
         logger.info('best score: {} {}'.format(min_score[use_score], min_score))
+
         logger.info('best params: {}'.format(min_params))
 
     imp = pd.DataFrame(clf.feature_importance(), columns=['imp'])
@@ -294,7 +309,7 @@ def train2():
                   }
     for min_params in tqdm(list(ParameterGrid(all_params))):
         pass
-    trees = 372
+    trees = 224
 
     gc.collect()
     logger.info('all data size {}'.format(x_train.shape))
