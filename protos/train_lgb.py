@@ -132,8 +132,8 @@ def train():
                   'max_bin': [255],
                   'num_leaves': [127],
                   'objective': ['binary'],
-                  'metric': ['binary_logloss'],
-                  'scale_pos_weight': [100],
+                  'metric': [['binary_logloss', 'auc']],
+                  'scale_pos_weight': [1],
                   'verbose': [-1],
                   }
     """
@@ -309,7 +309,7 @@ def train2():
                   }
     for min_params in tqdm(list(ParameterGrid(all_params))):
         pass
-    trees = 224
+    trees = 237
 
     gc.collect()
     logger.info('all data size {}'.format(x_train.shape))

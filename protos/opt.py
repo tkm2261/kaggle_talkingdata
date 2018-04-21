@@ -25,9 +25,6 @@ print(DIR)
 from numba import jit
 CAT_FEAT = ['app', 'os']
 
-LIST_DROP_COL = ['channel', 'cnt_os', 'cnt_dayhouripappos', 'cnt_ch', 'cnt_dayhouripos', 'cnt_dayhouripchannel', 'cnt_os_r', 'cnt_nochannel', 'cnt_dayhouripapp', 'cnt_ch_r', 'cnt_dayhouripappchannel',
-                 'cnt_dayhouripappdevice', 'cnt_ip_r', 'cnt_dayiphourapp', 'cnt_dayhouripchanneldevice', 'cnt_dayhouripchannelos', 'cnt_app', 'cnt_ch_app', 'cnt_app_r', 'cnt_dayhouripdevice', 'cnt_ch_app_r', 'cnt_dayhouriosdevice', 'cnt_ip']
-
 
 def consist_score(label, pred):
     idx = label == 1
@@ -98,14 +95,14 @@ def train():
                   'max_depth': [-1],
                   'min_split_gain': [0],
                   'reg_alpha': [0],
-                  'max_bin': [63],
+                  'max_bin': [255],
                   'num_leaves': [127],
                   'objective': ['binary'],
                   'metric': ['auc'],
                   'scale_pos_weight': [1],
                   'verbose': [-1],
-                  'device': ['gpu'],
-                  'drop': list(range(0, len(LIST_DROP_COL)))
+                  #'device': ['gpu'],
+                  'drop': [None] + list(range(0, len(usecols)))
                   }
     use_score = 0
     min_score = (100, 100, 100)
@@ -126,7 +123,10 @@ def train():
 
             _params = copy.deepcopy(params)
             drop_idx = _params.pop('drop')
-            drop_col = drop_cols + [LIST_DROP_COL[drop_idx]]
+            if drop_idx is not None:
+                drop_col = drop_cols + [usecols[drop_idx]]
+            else:
+                drop_col = []
             params['drop'] = drop_col
 
             trn_x.drop(drop_col, axis=1, inplace=True)
@@ -134,15 +134,17 @@ def train():
             cat_feat = CAT_FEAT
             cols = trn_x.columns.values.tolist()
             train_data = lgb.Dataset(trn_x.values.astype(np.float32), label=trn_y,
-                                     categorical_feature=cat_feat, feature_name=cols)
+                                     # categorical_feature=cat_feat,
+                                     feature_name=cols)
             test_data = lgb.Dataset(val_x.values.astype(np.float32), label=val_y,
-                                    categorical_feature=cat_feat, feature_name=cols)
+                                    # categorical_feature=cat_feat,
+                                    feature_name=cols)
             del trn_x
             gc.collect()
 
             clf = lgb.train(_params,
                             train_data,
-                            10000,  # params['n_estimators'],
+                            10,  # params['n_estimators'],
                             early_stopping_rounds=30,
                             valid_sets=[test_data],
                             # feval=cst_metric_xgb,
