@@ -119,17 +119,17 @@ def train():
     with open(DIR + 'usecols.pkl', 'wb') as f:
         pickle.dump(usecols, f, -1)
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=871)
-    # {'colsample_bytree': 0.9, 'learning_rate': 0.1, 'max_bin': 255, 'max_depth': -1, 'metric': 'auc', 'min_child_weight': 20, 'min_split_gain': 0, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 1, 'seed': 114, 'subsample': 1.0, 'subsample_freq': 1, 'verbose': -1}
-    all_params = {'min_child_weight': [20],
-                  'subsample': [1],
+    # {'colsample_bytree': 0.6, 'learning_rate': 0.2, 'max_bin': 255, 'max_depth': -1, 'metric': ['binary_logloss', 'auc'], 'min_child_weight': 30, 'min_split_gain': 0.0001, 'num_leaves': 127, 'objective': 'binary', 'reg_alpha': 0, 'scale_pos_weight': 1, 'seed': 114, 'subsample': 1, 'subsample_freq': 1, 'verbose': -1, 'categorical_column': [0, 1]}
+    all_params = {'min_child_weight': [25],
+                  'subsample': [0.7],
                   'subsample_freq': [1],
                   'seed': [114],
-                  'colsample_bytree': [0.9],
+                  'colsample_bytree': [0.6],
                   'learning_rate': [0.1],
                   'max_depth': [-1],
-                  'min_split_gain': [0],
-                  'reg_alpha': [0],
-                  'max_bin': [255],
+                  'min_split_gain': [0.001],
+                  'reg_alpha': [0.0001],
+                  'max_bin': [2047],
                   'num_leaves': [127],
                   'objective': ['binary'],
                   'metric': [['binary_logloss', 'auc']],
