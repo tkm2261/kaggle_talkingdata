@@ -1,187 +1,42 @@
--- takling.train2
-SELECT
-*,
-TIMESTAMP_DIFF(click_time, LAG(click_time) OVER(partition by ip order by click_time), SECOND) as timediff,
-EXTRACT(year from click_time) as year,
-EXTRACT(month from click_time) as month,
-EXTRACT(day from click_time) as day,
-EXTRACT(DAYOFWEEK from click_time) as dayofweek,
-EXTRACT(HOUR from click_time) as hour
-FROM
-  `talking.train`
 
--- takling.test2
-SELECT
-*,
-TIMESTAMP_DIFF(click_time, LAG(click_time) OVER(partition by ip order by click_time), SECOND) as timediff,
-EXTRACT(year from click_time) as year,
-EXTRACT(month from click_time) as month,
-EXTRACT(day from click_time) as day,
-EXTRACT(DAYOFWEEK from click_time) as dayofweek,
-EXTRACT(HOUR from click_time) as hour
-FROM
-  `talking.test`
 
--- takling.train_test
-SELECT
-null as click_id,
-ip, app, device, os, channel, click_time, attributed_time, is_attributed, timediff, year, month, day, dayofweek, hour
-FROM
-`talking.train2`
-UNION ALL
-SELECT
-click_id,
-ip, app, device, os, channel, click_time, null as attributed_time, null as is_attributed, timediff, year, month, day, dayofweek, hour
-FROM
-`talking.test2`
-
--- takling.train_test2
-SELECT
-  *,
-  avg(is_attributed) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ip,
-  sum(cast(is_attributed as int64)) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as sum_attr,
-  TIMESTAMP_DIFF(click_time, MAX(attributed_time) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), SECOND) as last_attr
-FROM
-  `talking.train_test`
-
--- takling.mst_app
-SELECT
-  app,
-  avg(is_attributed) avg_app,
-  count(1) / 184903890 cnt_app
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_app
-FROM
-  `talking.train`
-GROUP BY
-  app
-
--- takling.mst_device
-SELECT
-  device,
-  avg(is_attributed) avg_device,
-  count(1) / 184903890 cnt_device
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_device
-FROM
-  `talking.train`
-GROUP BY
-  device
-
--- takling.mst_os
-SELECT
-  os,
-  avg(is_attributed) avg_os,
-  count(1) / 184903890 cnt_os
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_os
-FROM
-  `talking.train`
-GROUP BY
-  os
-
--- takling.mst_channel
-SELECT
-  channel,
-  avg(is_attributed) avg_channel,
-  count(1) / 184903890 cnt_channel
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_channel
-FROM
-  `talking.train`
-GROUP BY
-  channel
-
--- takling.mst_hour
-SELECT
-  hour,
-  avg(is_attributed) avg_hour,
-  count(1) / 184903890 cnt_hour
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_hour
-FROM
-  `talking.train2`
-GROUP BY
-  hour
-
--- takling.train_test3
+-- takling.train_test3_8
 SELECT
   t.*,
   a.avg_app, d.avg_device, o.avg_os, c.avg_channel, h.avg_hour,
-  a.cnt_app, d.cnt_device, o.cnt_os, c.cnt_channel, h.cnt_hour,
-  AVG(t.is_attributed) OVER(partition by t.ip, t.day, t.hour order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ipdayhour,
-  ROW_NUMBER() OVER(partition by t.ip order by click_time) as cnt_ip,
-  SUM(t.is_attributed) OVER(partition by t.ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as sum_ip
+  a.cnt_app, d.cnt_device, o.cnt_os, c.cnt_channel, h.cnt_hour
 FROM
   `talking.train_test2` as t
 LEFT OUTER JOIN
-  talking.mst_app as a
+  talking.mst_app_07 as a
 ON
-  a.app = t.app
+  a.app = t.app AND a.span = t.span
 LEFT OUTER JOIN
-  talking.mst_device as d
+  talking.mst_device_7 as d
 ON
-  d.device = t.device
+  d.device = t.device AND d.span = t.span
 LEFT OUTER JOIN
-  talking.mst_os as o
+  talking.mst_os_7 as o
 ON
-  o.os = t.os
+  o.os = t.os AND o.span = t.span
 LEFT OUTER JOIN
-  talking.mst_channel as c
+  talking.mst_ch_7 as c
 ON
-  c.channel = t.channel
+  c.channel = t.channel AND c.span = t.span
 LEFT OUTER JOIN
-  talking.mst_hour as hz
+  talking.mst_ip_7 as i
+ON
+  i.ip = t.ip AND c.span = t.span
+LEFT OUTER JOIN
+  talking.mst_hour_7 as h
 ON
   h.hour = t.hour
-
-
--- dmt_train
-SELECT
-  ip,
-  concat('[', STRING_AGG(CASE WHEN is_attributed is not null THEN cast(is_attributed as string) ELSE '-1' END order by click_time), ']') as list_target,
-  concat('[', STRING_AGG(CASE WHEN app is not null THEN cast(app as string) ELSE '-1' END order by click_time), ']') as list_app,
-  concat('[', STRING_AGG(CASE WHEN device is not null THEN cast(device as string) ELSE '-1' END order by click_time), ']') as list_device,
-  concat('[', STRING_AGG(CASE WHEN os is not null THEN cast(os as string) ELSE '-1' END order by click_time), ']') as list_os,
-  concat('[', STRING_AGG(CASE WHEN channel is not null THEN cast(channel as string) ELSE '-1' END order by click_time), ']') as list_ch,
-  concat('[', STRING_AGG(CASE WHEN timediff is not null THEN cast(timediff as string) ELSE '-1' END order by click_time), ']') as list_timediff,
-  concat('[', STRING_AGG(CASE WHEN hour is not null THEN cast(hour as string) ELSE '-1' END order by click_time), ']') as list_hour,
-  concat('[', STRING_AGG(CASE WHEN sum_attr is not null THEN cast(sum_attr as string) ELSE '-1' END order by click_time), ']') as list_sum_attr,
-  concat('[', STRING_AGG(CASE WHEN last_attr is not null THEN cast(last_attr as string) ELSE '-1' END order by click_time), ']') as list_attr,
-  concat('[', STRING_AGG(CASE WHEN avg_ip is not null THEN cast(avg_ip as string) ELSE '-1' END order by click_time), ']') as list_avg_ip
-FROM
-  `talking.train_test3`
 WHERE
-  click_id is null
-group by
-  ip
-
--- dmt_test
-SELECT
-*
-FROM
-(
-SELECT
-  ip,
-  concat('[', STRING_AGG(cast(click_id as string) order by click_time), ']') as flg,
-  concat('[', STRING_AGG(CASE WHEN click_id is not null THEN cast(click_id as string) ELSE '-1' END order by click_time), ']') as list_click_id,
-  concat('[', STRING_AGG(CASE WHEN app is not null THEN cast(app as string) ELSE '-1' END order by click_time), ']') as list_app,
-  concat('[', STRING_AGG(CASE WHEN device is not null THEN cast(device as string) ELSE '-1' END order by click_time), ']') as list_device,
-  concat('[', STRING_AGG(CASE WHEN os is not null THEN cast(os as string) ELSE '-1' END order by click_time), ']') as list_os,
-  concat('[', STRING_AGG(CASE WHEN channel is not null THEN cast(channel as string) ELSE '-1' END order by click_time), ']') as list_ch,
-  concat('[', STRING_AGG(CASE WHEN timediff is not null THEN cast(timediff as string) ELSE '-1' END order by click_time), ']') as list_timediff,
-  concat('[', STRING_AGG(CASE WHEN hour is not null THEN cast(hour as string) ELSE '-1' END order by click_time), ']') as list_hour,
-  concat('[', STRING_AGG(CASE WHEN sum_attr is not null THEN cast(sum_attr as string) ELSE '-1' END order by click_time), ']') as list_sum_attr,
-  concat('[', STRING_AGG(CASE WHEN last_attr is not null THEN cast(last_attr as string) ELSE '-1' END order by click_time), ']') as list_attr,
-  concat('[', STRING_AGG(CASE WHEN avg_ip is not null THEN cast(avg_ip as string) ELSE '-1' END order by click_time), ']') as list_avg_ip
-FROM
-  `talking.train_test3`
-group by
-  ip
-)
-WHERE
-  flg is not null
-
+  t.day = 8 AND t.span > 0
 
   SELECT
 click_id,
 ip,
-sum_attr, last_attr, cnt_ip,
 app,
 LAG(app, 1) OVER(partition by ip order by click_time) app_1,
 LAG(app, 2) OVER(partition by ip order by click_time) app_2,

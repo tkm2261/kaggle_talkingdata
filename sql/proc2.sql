@@ -6,7 +6,9 @@ EXTRACT(year from click_time) as year,
 EXTRACT(month from click_time) as month,
 EXTRACT(day from click_time) as day,
 EXTRACT(DAYOFWEEK from click_time) as dayofweek,
-EXTRACT(HOUR from click_time) as hour
+EXTRACT(HOUR from click_time) as hour,
+EXTRACT(MINUTE from click_time) as minute,
+EXTRACT(SECOND from click_time) as second
 FROM
   `talking.train`
 
@@ -18,164 +20,401 @@ EXTRACT(year from click_time) as year,
 EXTRACT(month from click_time) as month,
 EXTRACT(day from click_time) as day,
 EXTRACT(DAYOFWEEK from click_time) as dayofweek,
-EXTRACT(HOUR from click_time) as hour
+EXTRACT(HOUR from click_time) as hour,
+EXTRACT(MINUTE from click_time) as minute,
+EXTRACT(SECOND from click_time) as second
 FROM
   `talking.test`
 
 -- takling.train_test
 SELECT
 null as click_id,
-ip, app, device, os, channel, click_time, attributed_time, is_attributed, timediff, year, month, day, dayofweek, hour
+CASE WHEN hour >= 4 and hour <= 6 THEN 1
+     WHEN hour >= 9 and hour <= 11 THEN 2
+     WHEN hour >= 13 and hour <= 15 THEN 3 ELSE -1 END span,
+ip, app, device, os, channel, click_time, attributed_time, is_attributed, timediff, year, month, day, dayofweek, hour, minute, second
 FROM
 `talking.train2`
 UNION ALL
 SELECT
 click_id,
-ip, app, device, os, channel, click_time, null as attributed_time, null as is_attributed, timediff, year, month, day, dayofweek, hour
+CASE WHEN hour >= 4 and hour <= 6 THEN 1
+     WHEN hour >= 9 and hour <= 11 THEN 2
+     WHEN hour >= 13 and hour <= 15 THEN 3 ELSE -1 END span,
+ip, app, device, os, channel, click_time, null as attributed_time, null as is_attributed, timediff, year, month, day, dayofweek, hour, minute, second
 FROM
 `talking.test2`
 
 -- takling.train_test2
 SELECT
   *,
-  avg(is_attributed) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ip,
-  sum(cast(is_attributed as int64)) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as sum_attr,
-  TIMESTAMP_DIFF(click_time, MAX(attributed_time) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING), SECOND) as last_attr
+  TIMESTAMP_DIFF(click_time, LAG(click_time, 1) OVER(partition by ip order by click_time), SECOND) as click_diff_1,
+  TIMESTAMP_DIFF(click_time, LAG(click_time, 2) OVER(partition by ip order by click_time), SECOND) as click_diff_2,
+  TIMESTAMP_DIFF(click_time, LAG(click_time, 3) OVER(partition by ip order by click_time), SECOND) as click_diff_3,
+  TIMESTAMP_DIFF(click_time, LAG(click_time, 4) OVER(partition by ip order by click_time), SECOND) as click_diff_4,
+  TIMESTAMP_DIFF(click_time, LAG(click_time, 5) OVER(partition by ip order by click_time), SECOND) as click_diff_5,
+  AVG(t.is_attributed) OVER(partition by t.ip, t.day, t.hour order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ipdayhour,
+  ROW_NUMBER() OVER(partition by t.ip order by click_time) as cnt_ip,
+  SUM(t.is_attributed) OVER(partition by t.ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as sum_ip,
+  avg(is_attributed) OVER(partition by ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ip
 FROM
-  `talking.train_test`
+  `talking.train_test` as t
 
 -- takling.mst_app
 SELECT
-  app,
-  avg(is_attributed) avg_app,
-  count(1) / 184903890 cnt_app
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_app
-FROM
-  `talking.train`
-GROUP BY
-  app
+  8 as day, app, avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY app, span
+UNION ALL
+SELECT
+  9 as day, app, span, avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY app, span
+UNION ALL
+SELECT
+  10 as day, app, span, avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY app, span
+
+-- takling.mst_ip
+SELECT
+  8 as day, ip, span, avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY ip, span
+UNION ALL
+SELECT
+  9 as day, ip, span, avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY ip, span
+UNION ALL
+SELECT
+  10 as day, ip, span, avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY ip, span
 
 -- takling.mst_device
 SELECT
-  device,
-  avg(is_attributed) avg_device,
-  count(1) / 184903890 cnt_device
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_device
-FROM
-  `talking.train`
-GROUP BY
-  device
-
--- takling.mst_os
+  8 as day, device, span, avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY device, span
+UNION ALL
 SELECT
-  os,
-  avg(is_attributed) avg_os,
-  count(1) / 184903890 cnt_os
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_os
-FROM
-  `talking.train`
-GROUP BY
-  os
-
--- takling.mst_channel
+  9 as day, device, span, avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY device, span
+UNION ALL
 SELECT
-  channel,
-  avg(is_attributed) avg_channel,
-  count(1) / 184903890 cnt_channel
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_channel
-FROM
-  `talking.train`
-GROUP BY
-  channel
+  10 as day, device, span, avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY device, span
+
+-- takling.mst_os_7
+SELECT
+  8 as day, os, span, avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY os, span
+UNION ALL
+SELECT
+  9 as day, os, span, avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY os, span
+UNION ALL
+SELECT
+  10 as day, os, span, avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY os, span
+
+
+-- takling.mst_ch
+SELECT
+  8 as day, channel, span, avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY channel, span
+UNION ALL
+SELECT
+  9 as day, channel, span, avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY channel, span
+UNION ALL
+SELECT
+  10 as day, channel, span, avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY channel, span
+
 
 -- takling.mst_hour
 SELECT
-  hour,
-  avg(is_attributed) avg_hour,
-  count(1) / 184903890 cnt_hour
-  --CASE WHEN count(1) >= 100 THEN avg(is_attributed) ELSE -1 END avg_hour
-FROM
-  `talking.train2`
-GROUP BY
-  hour
+  8 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY hour
+UNION ALL
+SELECT
+  9 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY hour
+UNION ALL
+SELECT
+  10 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY hour
+
+
+-- takling.mst_minute
+SELECT
+  8 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY minute
+UNION ALL
+SELECT
+  9 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY minute
+UNION ALL
+SELECT
+  10 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY minute
+
+
+-- takling.mst_second
+SELECT
+  8 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY second
+UNION ALL
+SELECT
+  9 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY second
+UNION ALL
+SELECT
+  10 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY second
+
+
+#####
+
+-- takling.mst_app_day
+SELECT
+  8 as day, app,  avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY app
+UNION ALL
+SELECT
+  9 as day, app,  avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY app
+UNION ALL
+SELECT
+  10 as day, app,  avg(is_attributed) avg_app, count(1) cnt_app
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY app
+
+-- takling.mst_ip_day
+SELECT
+  8 as day, ip,  avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY ip
+UNION ALL
+SELECT
+  9 as day, ip,  avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY ip
+UNION ALL
+SELECT
+  10 as day, ip,  avg(is_attributed) avg_ip, count(1) cnt_ip
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY ip
+
+-- takling.mst_device_day
+SELECT
+  8 as day, device,  avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY device
+UNION ALL
+SELECT
+  9 as day, device,  avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY device
+UNION ALL
+SELECT
+  10 as day, device,  avg(is_attributed) avg_device, count(1) cnt_device
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY device
+
+-- takling.mst_os_day
+SELECT
+  8 as day, os,  avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY os
+UNION ALL
+SELECT
+  9 as day, os,  avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY os
+UNION ALL
+SELECT
+  10 as day, os,  avg(is_attributed) avg_os, count(1) cnt_os
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY os
+
+
+-- takling.mst_ch_day
+SELECT
+  8 as day, channel,  avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY channel
+UNION ALL
+SELECT
+  9 as day, channel,  avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY channel
+UNION ALL
+SELECT
+  10 as day, channel,  avg(is_attributed) avg_channel, count(1) cnt_channel
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY channel
+
+
+-- takling.mst_hour_day
+SELECT
+  8 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY hour
+UNION ALL
+SELECT
+  9 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY hour
+UNION ALL
+SELECT
+  10 as day, hour, avg(is_attributed) avg_hour, count(1) cnt_hour
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY hour
+
+
+-- takling.mst_minute_day
+SELECT
+  8 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY minute
+UNION ALL
+SELECT
+  9 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY minute
+UNION ALL
+SELECT
+  10 as day, minute, avg(is_attributed) avg_minute, count(1) cnt_minute
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY minute
+
+
+-- takling.mst_second_day
+SELECT
+  8 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-08 00:00:00'
+GROUP BY second
+UNION ALL
+SELECT
+  9 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-09 00:00:00'
+GROUP BY second
+UNION ALL
+SELECT
+  10 as day, second, avg(is_attributed) avg_second, count(1) cnt_second
+FROM `talking.train_test`
+WHERE click_time < '2017-11-10 00:00:00'
+GROUP BY second
+
+#####
 
 -- takling.train_test3
 SELECT
   t.*,
-  a.avg_app, d.avg_device, o.avg_os, c.avg_channel, h.avg_hour,
-  a.cnt_app, d.cnt_device, o.cnt_os, c.cnt_channel, h.cnt_hour,
-  AVG(t.is_attributed) OVER(partition by t.ip, t.day, t.hour order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as avg_ipdayhour,
-  ROW_NUMBER() OVER(partition by t.ip order by click_time) as cnt_ip,
-  SUM(t.is_attributed) OVER(partition by t.ip order by click_time ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) as sum_ip
-FROM
-  `talking.train_test2` as t
-LEFT OUTER JOIN
-  talking.mst_app as a
-ON
-  a.app = t.app
-LEFT OUTER JOIN
-  talking.mst_device as d
-ON
-  d.device = t.device
-LEFT OUTER JOIN
-  talking.mst_os as o
-ON
-  o.os = t.os
-LEFT OUTER JOIN
-  talking.mst_channel as c
-ON
-  c.channel = t.channel
-LEFT OUTER JOIN
-  talking.mst_hour as hz
-ON
-  h.hour = t.hour
+  a.avg_app, d.avg_device, o.avg_os, c.avg_channel, h.avg_hour, i.avg_ip as avg_ip_span, m.avg_minute, s.avg_second,
+  aa.avg_app avg_app2, dd.avg_device avg_device2, oo.avg_os avg_os2, cc.avg_channel avg_channel2, hh.avg_hour avg_hour2, ii.avg_ip as avg_ip_span2,
+  a.cnt_app, d.cnt_device, o.cnt_os, c.cnt_channel, h.cnt_hour, i.cnt_ip as cnt_ip_span, m.cnt_minute, s.cnt_second,
+  aa.cnt_app cnt_app2, dd.cnt_device cnt_device2, oo.cnt_os cnt_os2, cc.cnt_channel cnt_channel2, hh.cnt_hour cnt_hour2, ii.cnt_ip as cnt_ip_span2
+FROM `talking.train_test2` as t
+LEFT OUTER JOIN talking.mst_app as a
+ON a.app = t.app AND a.span = t.span AND a.day = t.day
+LEFT OUTER JOIN talking.mst_device as d
+ON d.device = t.device AND d.span = t.span AND d.day = t.day
+LEFT OUTER JOIN talking.mst_os as o
+ON o.os = t.os AND o.span = t.span AND o.day = t.day
+LEFT OUTER JOIN talking.mst_ch as c
+ON c.channel = t.channel AND c.span = t.span AND c.day = t.day
+LEFT OUTER JOIN talking.mst_ip as i
+ON i.ip = t.ip AND i.span = t.span AND i.day = t.day
+LEFT OUTER JOIN talking.mst_hour as h
+ON h.hour = t.hour AND h.day = t.day
+LEFT OUTER JOIN talking.mst_minute as m
+ON m.minute = t.minute AND m.day = t.day
+LEFT OUTER JOIN talking.mst_second as s
+ON s.second = t.second AND s.day = t.day
+LEFT OUTER JOIN talking.mst_app_day as aa
+ON aa.app = t.app AND aa.day = t.day
+LEFT OUTER JOIN talking.mst_device_day as dd
+ON dd.device = t.device AND dd.day = t.day
+LEFT OUTER JOIN talking.mst_os_day as oo
+ON oo.os = t.os AND oo.day = t.day
+LEFT OUTER JOIN talking.mst_ch_day as cc
+ON cc.channel = t.channel AND cc.day = t.day
+LEFT OUTER JOIN talking.mst_ip_day as ii
+ON ii.ip = t.ip AND ii.day = t.day
+LEFT OUTER JOIN talking.mst_hour_day as hh
+ON hh.hour = t.hour AND hh.day = t.day
 
 
--- dmt_train
-SELECT
-  ip,
-  concat('[', STRING_AGG(CASE WHEN is_attributed is not null THEN cast(is_attributed as string) ELSE '-1' END order by click_time), ']') as list_target,
-  concat('[', STRING_AGG(CASE WHEN app is not null THEN cast(app as string) ELSE '-1' END order by click_time), ']') as list_app,
-  concat('[', STRING_AGG(CASE WHEN device is not null THEN cast(device as string) ELSE '-1' END order by click_time), ']') as list_device,
-  concat('[', STRING_AGG(CASE WHEN os is not null THEN cast(os as string) ELSE '-1' END order by click_time), ']') as list_os,
-  concat('[', STRING_AGG(CASE WHEN channel is not null THEN cast(channel as string) ELSE '-1' END order by click_time), ']') as list_ch,
-  concat('[', STRING_AGG(CASE WHEN timediff is not null THEN cast(timediff as string) ELSE '-1' END order by click_time), ']') as list_timediff,
-  concat('[', STRING_AGG(CASE WHEN hour is not null THEN cast(hour as string) ELSE '-1' END order by click_time), ']') as list_hour,
-  concat('[', STRING_AGG(CASE WHEN sum_attr is not null THEN cast(sum_attr as string) ELSE '-1' END order by click_time), ']') as list_sum_attr,
-  concat('[', STRING_AGG(CASE WHEN last_attr is not null THEN cast(last_attr as string) ELSE '-1' END order by click_time), ']') as list_attr,
-  concat('[', STRING_AGG(CASE WHEN avg_ip is not null THEN cast(avg_ip as string) ELSE '-1' END order by click_time), ']') as list_avg_ip
-FROM
-  `talking.train_test3`
-WHERE
-  click_id is null
-group by
-  ip
-
--- dmt_test
-SELECT
-*
-FROM
-(
-SELECT
-  ip,
-  concat('[', STRING_AGG(cast(click_id as string) order by click_time), ']') as flg,
-  concat('[', STRING_AGG(CASE WHEN click_id is not null THEN cast(click_id as string) ELSE '-1' END order by click_time), ']') as list_click_id,
-  concat('[', STRING_AGG(CASE WHEN app is not null THEN cast(app as string) ELSE '-1' END order by click_time), ']') as list_app,
-  concat('[', STRING_AGG(CASE WHEN device is not null THEN cast(device as string) ELSE '-1' END order by click_time), ']') as list_device,
-  concat('[', STRING_AGG(CASE WHEN os is not null THEN cast(os as string) ELSE '-1' END order by click_time), ']') as list_os,
-  concat('[', STRING_AGG(CASE WHEN channel is not null THEN cast(channel as string) ELSE '-1' END order by click_time), ']') as list_ch,
-  concat('[', STRING_AGG(CASE WHEN timediff is not null THEN cast(timediff as string) ELSE '-1' END order by click_time), ']') as list_timediff,
-  concat('[', STRING_AGG(CASE WHEN hour is not null THEN cast(hour as string) ELSE '-1' END order by click_time), ']') as list_hour,
-  concat('[', STRING_AGG(CASE WHEN sum_attr is not null THEN cast(sum_attr as string) ELSE '-1' END order by click_time), ']') as list_sum_attr,
-  concat('[', STRING_AGG(CASE WHEN last_attr is not null THEN cast(last_attr as string) ELSE '-1' END order by click_time), ']') as list_attr,
-  concat('[', STRING_AGG(CASE WHEN avg_ip is not null THEN cast(avg_ip as string) ELSE '-1' END order by click_time), ']') as list_avg_ip
-FROM
-  `talking.train_test3`
-group by
-  ip
-)
-WHERE
-  flg is not null
 
 
   SELECT
